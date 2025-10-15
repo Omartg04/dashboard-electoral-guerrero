@@ -11,9 +11,9 @@ import io
 st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
 
 # Rutas de archivos
-csv_path = "/Users/omartellez/guerrero/consolidado_seleccion.csv"
-shp_path = "/Users/omartellez/guerrero/SECCION.shp"
-sample_path = "/Users/omartellez/guerrero/plan_de_campo.csv"
+csv_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/consolidado_seleccion.csv"
+shp_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/SECCION.shp"
+sample_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/plan_de_campo.csv"
 
 # Cargar datos
 @st.cache_data
