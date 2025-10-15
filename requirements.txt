@@ -1,6 +1,6 @@
-streamlit
+streamlit>=1.37
 pandas<2.2.0
-geopandas<1.0.0
+geopandas>=0.14,<1.0
 plotly
 folium
 streamlit-folium
