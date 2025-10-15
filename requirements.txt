@@ -1,6 +1,8 @@
 streamlit
-pandas
-geopandas
+pandas<2.2.0
+geopandas<1.0.0
 plotly
 folium
 streamlit-folium
+pyproj<3.7.0
+shapely<2.1.0
