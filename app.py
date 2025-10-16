@@ -270,37 +270,19 @@ with tab3:
     # Opciones de visualización del mapa
     col_map1, col_map2 = st.columns([3, 1])
     with col_map2:
-        st.markdown("""
-        **Controles del Mapa:**
-        - Usa el checkbox en la barra lateral para aislar la muestra.
-        - Usa el control de capas (arriba a la derecha) para cambiar la vista.
-        - Haz clic en las secciones para ver detalles.
-        """)
-
-    # --- INICIA LA CORRECCIÓN ---
-    # 1. Se crea un DataFrame intermedio para el mapa
-    # Este DataFrame ya respeta los filtros de distrito y municipio
-    map_display_data = filtered_gdf.copy()
-
-    # 2. Se aplica el filtro del checkbox (que ya existe en tu sidebar)
-    # Si 'show_sampled' es True, se filtra el DataFrame del mapa
-    if show_sampled:
-        map_display_data = map_display_data[map_display_data['is_sampled']]
-    # --- TERMINA LA CORRECCIÓN ---
-
-    # Crear mapa base, centrado dinámicamente en los datos que se mostrarán
-    map_center = [17.55, -99.50]
-    map_data_geo = map_display_data.dropna(subset=['geometry'])
-    if not map_data_geo.empty:
-        map_center = [map_data_geo.geometry.centroid.y.mean(), map_data_geo.geometry.centroid.x.mean()]
-
-    m = folium.Map(location=map_center, zoom_start=8, tiles="CartoDB positron")
+        st.markdown("**Controles:**")
+        st.markdown("- Usa el control de capas en el mapa")
+        st.markdown("- Haz clic en las secciones para ver detalles")
+        st.markdown("- Zoom con scroll o botones")
     
-    # Capa para TOTAL PADRÓN - AHORA USA LOS DATOS FILTRADOS
+    # Crear mapa
+    m = folium.Map(location=[17.55, -99.50], zoom_start=8, tiles="CartoDB positron")
+    
+    # Capa para TOTAL PADRÓN
     folium.Choropleth(
-        geo_data=map_display_data, # <--- Cambio clave
+        geo_data=filtered_gdf,
         name="🔵 Total Padrón",
-        data=map_display_data, # <--- Cambio clave
+        data=filtered_gdf,
         columns=['SECCIÓN', 'TOTAL PADRÓN'],
         key_on='feature.properties.SECCIÓN',
         fill_color='YlOrRd',
@@ -310,11 +292,11 @@ with tab3:
         show=True
     ).add_to(m)
     
-    # Capa para TOTAL LISTA NOMINAL - AHORA USA LOS DATOS FILTRADOS
+    # Capa para TOTAL LISTA NOMINAL
     folium.Choropleth(
-        geo_data=map_display_data, # <--- Cambio clave
+        geo_data=filtered_gdf,
         name="🟢 Total Lista Nominal",
-        data=map_display_data, # <--- Cambio clave
+        data=filtered_gdf,
         columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
         key_on='feature.properties.SECCIÓN',
         fill_color='BuGn',
@@ -324,28 +306,29 @@ with tab3:
         show=False
     ).add_to(m)
     
-    # Capa para resaltar secciones muestreadas - AHORA USA LOS DATOS FILTRADOS
-    # Ya no es necesario volver a filtrar, 'map_display_data' ya contiene solo la muestra si el check está activo
-    if not map_display_data.empty:
+    # Capa para secciones muestreadas con tooltip enriquecido
+    sampled_sections = filtered_gdf[filtered_gdf['is_sampled']].copy()
+    if not sampled_sections.empty:
         folium.GeoJson(
-            map_display_data, # <--- Cambio clave
-            name="🎯 Secciones Muestreadas (Resaltado)",
+            sampled_sections,
+            name="🎯 Secciones Muestreadas",
             style_function=lambda x: {
-                'fillColor': 'none',
-                'color': '#E32051',
-                'weight': 3
+                'fillColor': '#ff4444', 
+                'fillOpacity': 0.7, 
+                'color': 'darkred', 
+                'weight': 2
             },
             tooltip=folium.GeoJsonTooltip(
                 fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', "TOTAL LISTA NOMINAL"],
-                aliases=['Sección:', 'Municipio:', 'Padrón:', 'Lista Nominal:'],
-                style=("background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;")
+                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal'],
+                localize=True
             ),
             show=True
         ).add_to(m)
     
     folium.LayerControl().add_to(m)
-    st_folium(m, use_container_width=True, height=700)
-    
+    st_folium(m, width=1400, height=700, returned_objects=[])
+
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
     st.header("📊 Análisis de Cobertura de Muestra")
