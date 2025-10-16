@@ -267,7 +267,7 @@ with tab2:
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
     
-    # Este bloque de texto no cambia
+    # Opciones de visualización del mapa
     col_map1, col_map2 = st.columns([3, 1])
     with col_map2:
         st.markdown("""
@@ -278,18 +278,17 @@ with tab3:
         """)
 
     # --- INICIA LA CORRECCIÓN ---
-
-    # 1. Se crea la fuente de datos para el mapa, respetando los filtros de distrito/municipio
+    # 1. Se crea un DataFrame intermedio para el mapa
+    # Este DataFrame ya respeta los filtros de distrito y municipio
     map_display_data = filtered_gdf.copy()
 
-    # 2. Se aplica el filtro del checkbox que YA TIENES en tu sidebar
-    #    (Si tu variable no se llama 'show_sampled', ajústala aquí)
+    # 2. Se aplica el filtro del checkbox (que ya existe en tu sidebar)
+    # Si 'show_sampled' es True, se filtra el DataFrame del mapa
     if show_sampled:
         map_display_data = map_display_data[map_display_data['is_sampled']]
-
     # --- TERMINA LA CORRECCIÓN ---
 
-    # Crear mapa base, centrado dinámicamente en los datos que se van a mostrar
+    # Crear mapa base, centrado dinámicamente en los datos que se mostrarán
     map_center = [17.55, -99.50]
     map_data_geo = map_display_data.dropna(subset=['geometry'])
     if not map_data_geo.empty:
@@ -325,11 +324,11 @@ with tab3:
         show=False
     ).add_to(m)
     
-    # Capa para resaltar secciones muestreadas
-    # No es necesario filtrar de nuevo, ya que map_display_data ya contiene solo la muestra
+    # Capa para resaltar secciones muestreadas - AHORA USA LOS DATOS FILTRADOS
+    # Ya no es necesario volver a filtrar, 'map_display_data' ya contiene solo la muestra si el check está activo
     if not map_display_data.empty:
         folium.GeoJson(
-            map_display_data[map_display_data['is_sampled']], # Filtramos aquí para asegurar que solo se resalten las de la muestra
+            map_display_data, # <--- Cambio clave
             name="🎯 Secciones Muestreadas (Resaltado)",
             style_function=lambda x: {
                 'fillColor': 'none',
@@ -345,7 +344,8 @@ with tab3:
         ).add_to(m)
     
     folium.LayerControl().add_to(m)
-    st_folium(m, use_container_width=True, height=700) 
+    st_folium(m, use_container_width=True, height=700)
+    
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
     st.header("📊 Análisis de Cobertura de Muestra")
