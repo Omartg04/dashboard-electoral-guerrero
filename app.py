@@ -196,7 +196,7 @@ with tab2:
             mode = "gauge+number+delta",
             value = tasa_muestreo,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Tasa de Muestreo (% Secciones)"},
+            title = {'text': "Tasa de Muestreo<br>(% Secciones)"},
             delta = {'reference': 10},
             gauge = {
                 'axis': {'range': [None, 100]},
@@ -217,7 +217,7 @@ with tab2:
             mode = "gauge+number",
             value = cobertura_poblacional,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Cobertura Poblacional (% Lista Nominal)"},
+            title = {'text': "Cobertura Poblacional <br>(% Lista Nominal)"},
             gauge = {
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkgreen"},
