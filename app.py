@@ -275,59 +275,104 @@ with tab3:
         st.markdown("- Haz clic en las secciones para ver detalles")
         st.markdown("- Zoom con scroll o botones")
     
-    # Crear mapa
-    m = folium.Map(location=[17.55, -99.50], zoom_start=8, tiles="CartoDB positron")
+    # Preparar datos para el mapa según filtros
+    map_data = filtered_gdf.copy()
     
-    # Capa para TOTAL PADRÓN
-    folium.Choropleth(
-        geo_data=filtered_gdf,
-        name="🔵 Total Padrón",
-        data=filtered_gdf,
-        columns=['SECCIÓN', 'TOTAL PADRÓN'],
-        key_on='feature.properties.SECCIÓN',
-        fill_color='YlOrRd',
-        fill_opacity=0.6,
-        line_opacity=0.3,
-        legend_name='Total Padrón',
-        show=True
-    ).add_to(m)
+    # Si el checkbox está activado, filtrar solo secciones muestreadas
+    if show_sampled:
+        map_data = map_data[map_data['is_sampled']]
     
-    # Capa para TOTAL LISTA NOMINAL
-    folium.Choropleth(
-        geo_data=filtered_gdf,
-        name="🟢 Total Lista Nominal",
-        data=filtered_gdf,
-        columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
-        key_on='feature.properties.SECCIÓN',
-        fill_color='BuGn',
-        fill_opacity=0.6,
-        line_opacity=0.3,
-        legend_name='Total Lista Nominal',
-        show=False
-    ).add_to(m)
-    
-    # Capa para secciones muestreadas con tooltip enriquecido
-    sampled_sections = filtered_gdf[filtered_gdf['is_sampled']].copy()
-    if not sampled_sections.empty:
-        folium.GeoJson(
-            sampled_sections,
-            name="🎯 Secciones Muestreadas",
-            style_function=lambda x: {
-                'fillColor': '#ff4444', 
-                'fillOpacity': 0.7, 
-                'color': 'darkred', 
-                'weight': 2
-            },
-            tooltip=folium.GeoJsonTooltip(
-                fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', "TOTAL LISTA NOMINAL"],
-                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal'],
-                localize=True
-            ),
-            show=True
-        ).add_to(m)
-    
-    folium.LayerControl().add_to(m)
-    st_folium(m, width=1400, height=700, returned_objects=[])
+    # Verificar que hay datos para mostrar
+    if map_data.empty or map_data['geometry'].isna().all():
+        st.warning("⚠️ No hay datos geográficos disponibles para los filtros seleccionados.")
+    else:
+        # Calcular el centro del mapa basado en los datos filtrados
+        bounds = map_data.total_bounds  # [minx, miny, maxx, maxy]
+        center_lat = (bounds[1] + bounds[3]) / 2
+        center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Crear mapa centrado en los datos filtrados
+        m = folium.Map(
+            location=[center_lat, center_lon], 
+            zoom_start=9, 
+            tiles="CartoDB positron"
+        )
+        
+        # Capa para TOTAL PADRÓN
+        if not map_data.empty:
+            folium.Choropleth(
+                geo_data=map_data,
+                name="🔵 Total Padrón",
+                data=map_data,
+                columns=['SECCIÓN', 'TOTAL PADRÓN'],
+                key_on='feature.properties.SECCIÓN',
+                fill_color='YlOrRd',
+                fill_opacity=0.6,
+                line_opacity=0.3,
+                legend_name='Total Padrón',
+                show=True
+            ).add_to(m)
+        
+        # Capa para TOTAL LISTA NOMINAL
+        if not map_data.empty:
+            folium.Choropleth(
+                geo_data=map_data,
+                name="🟢 Total Lista Nominal",
+                data=map_data,
+                columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
+                key_on='feature.properties.SECCIÓN',
+                fill_color='BuGn',
+                fill_opacity=0.6,
+                line_opacity=0.3,
+                legend_name='Total Lista Nominal',
+                show=False
+            ).add_to(m)
+        
+        # Capa para secciones muestreadas con tooltip enriquecido
+        sampled_sections = map_data[map_data['is_sampled']].copy()
+        
+        if not sampled_sections.empty:
+            # Agregar información de encuestas a las secciones muestreadas
+            sampled_sections = sampled_sections.merge(
+                df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], 
+                on='SECCIÓN', 
+                how='left'
+            )
+            
+            folium.GeoJson(
+                sampled_sections,
+                name="🎯 Secciones Muestreadas",
+                style_function=lambda x: {
+                    'fillColor': '#ff4444', 
+                    'fillOpacity': 0.7, 
+                    'color': 'darkred', 
+                    'weight': 2
+                },
+                tooltip=folium.GeoJsonTooltip(
+                    fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS'],
+                    aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal', 'Encuestas Asignadas'],
+                    localize=True
+                ),
+                show=True
+            ).add_to(m)
+        
+        # Agregar control de capas
+        folium.LayerControl().add_to(m)
+        
+        # Ajustar el mapa a los límites de los datos
+        m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+        
+        # Renderizar el mapa
+        st_folium(m, width=1400, height=700, returned_objects=[])
+        
+        # Mostrar estadísticas del área visible
+        st.markdown("---")
+        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+        col_stat1.metric("Secciones visibles", len(map_data))
+        col_stat2.metric("Secciones muestreadas visibles", len(sampled_sections) if not sampled_sections.empty else 0)
+        col_stat3.metric("Población total (Lista Nominal)", f"{map_data['TOTAL LISTA NOMINAL'].sum():,.0f}")
+        if not sampled_sections.empty:
+            col_stat4.metric("Encuestas en área visible", int(sampled_sections['ENCUESTAS_ASIGNADAS'].sum()))
 
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
