@@ -315,14 +315,13 @@ with tab3:
         highlight=True
     ).add_to(m)
     
-    # --- INICIA LA CORRECCIÓN ---
-    # Capa para RESALTAR secciones muestreadas
+    # Capa para RESALTAR secciones muestreadas (versión estable)
     sampled_sections = filtered_gdf[filtered_gdf['is_sampled']].copy()
     if not sampled_sections.empty:
         folium.GeoJson(
             sampled_sections,
             name="🎯 Secciones Muestreadas (Resaltado)",
-            # Estilo mejorado: sin relleno y con borde grueso para no ocultar el mapa de calor
+            # Estilo con borde para no ocultar el mapa de calor
             style_function=lambda x: {
                 'fillColor': 'none',        # Sin color de relleno
                 'color': '#E32051',         # Color del borde (rojo brillante)
@@ -336,9 +335,7 @@ with tab3:
             show=True # La capa de resaltado se muestra por defecto
         ).add_to(m)
     
-    # --- TERMINA LA CORRECCIÓN ---
-    
-    # Añadir el control de capas y renderizar el mapa final
+    # Añadir el control de capas y renderizar el mapa final UNA SOLA VEZ
     folium.LayerControl().add_to(m)
     st_folium(m, use_container_width=True, height=700)
 
