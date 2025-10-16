@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import geopandas as gpd
 import streamlit as st
@@ -11,10 +12,15 @@ import io
 st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
 
 # Rutas de archivos (relativas al directorio de app.py)
-base_dir = os.path.dirname(__file__)  # Directorio donde está app.py
-csv_path = os.path.join(base_dir, "data", "consolidado_seleccion.csv")
-shp_path = os.path.join(base_dir, "data", "SECCION.shp")
-sample_path = os.path.join(base_dir, "data", "plan_de_campo.csv")
+csv_path = "data/consolidado_seleccion.csv"
+shp_path = "data/SECCION.shp"
+sample_path = "data/plan_de_campo.csv"
+
+# Verificar que los archivos existen (para depuración)
+for path in [csv_path, shp_path, sample_path]:
+    if not os.path.exists(path):
+        st.error(f"No se encontró el archivo: {path}")
+        raise FileNotFoundError(f"No se encontró el archivo: {path}")
 
 # Cargar datos
 @st.cache_data
