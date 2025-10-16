@@ -10,10 +10,11 @@ import io
 # Configuración de la página
 st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
 
-# Rutas de archivos
-csv_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/data/consolidado_seleccion.csv"
-shp_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/data/SECCION.shp"
-sample_path = "/Users/omartellez/guerrero/dashboard-electoral-guerrero/data/plan_de_campo.csv"
+# Rutas de archivos (relativas al directorio de app.py)
+base_dir = os.path.dirname(__file__)  # Directorio donde está app.py
+csv_path = os.path.join(base_dir, "data", "consolidado_seleccion.csv")
+shp_path = os.path.join(base_dir, "data", "SECCION.shp")
+sample_path = os.path.join(base_dir, "data", "plan_de_campo.csv")
 
 # Cargar datos
 @st.cache_data
