@@ -267,25 +267,18 @@ with tab2:
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
     
-    # Opciones de visualización del mapa (sin cambios)
+    # Opciones de visualización del mapa
     col_map1, col_map2 = st.columns([3, 1])
     with col_map2:
-        st.markdown("""
-        **Controles del Mapa:**
-        - Usa el **control de capas** (arriba a la derecha) para cambiar entre Padrón y Lista Nominal.
-        - Las secciones de la muestra están resaltadas con un **borde rojo**.
-        - Haz clic en cualquier sección para ver sus detalles.
-        """)
+        st.markdown("**Controles:**")
+        st.markdown("- Usa el control de capas en el mapa")
+        st.markdown("- Haz clic en las secciones para ver detalles")
+        st.markdown("- Zoom con scroll o botones")
     
-    # Crear mapa base, centrado dinámicamente en los datos filtrados
-    map_center = [17.55, -99.50] # Centro por defecto para Guerrero
-    map_data_geo = filtered_gdf.dropna(subset=['geometry'])
-    if not map_data_geo.empty:
-        map_center = [map_data_geo.geometry.centroid.y.mean(), map_data_geo.geometry.centroid.x.mean()]
-
-    m = folium.Map(location=map_center, zoom_start=8, tiles="CartoDB positron")
+    # Crear mapa
+    m = folium.Map(location=[17.55, -99.50], zoom_start=8, tiles="CartoDB positron")
     
-    # Capa de calor para TOTAL PADRÓN
+    # Capa para TOTAL PADRÓN
     folium.Choropleth(
         geo_data=filtered_gdf,
         name="🔵 Total Padrón",
@@ -293,14 +286,13 @@ with tab3:
         columns=['SECCIÓN', 'TOTAL PADRÓN'],
         key_on='feature.properties.SECCIÓN',
         fill_color='YlOrRd',
-        fill_opacity=0.7,
-        line_opacity=0.4,
+        fill_opacity=0.6,
+        line_opacity=0.3,
         legend_name='Total Padrón',
-        show=True, # Esta capa se muestra por defecto
-        highlight=True
+        show=True
     ).add_to(m)
     
-    # Capa de calor para TOTAL LISTA NOMINAL
+    # Capa para TOTAL LISTA NOMINAL
     folium.Choropleth(
         geo_data=filtered_gdf,
         name="🟢 Total Lista Nominal",
@@ -308,36 +300,34 @@ with tab3:
         columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
         key_on='feature.properties.SECCIÓN',
         fill_color='BuGn',
-        fill_opacity=0.7,
-        line_opacity=0.4,
+        fill_opacity=0.6,
+        line_opacity=0.3,
         legend_name='Total Lista Nominal',
-        show=False, # Esta capa está oculta por defecto
-        highlight=True
+        show=False
     ).add_to(m)
     
-    # Capa para RESALTAR secciones muestreadas (versión estable)
+    # Capa para secciones muestreadas con tooltip enriquecido
     sampled_sections = filtered_gdf[filtered_gdf['is_sampled']].copy()
     if not sampled_sections.empty:
         folium.GeoJson(
             sampled_sections,
-            name="🎯 Secciones Muestreadas (Resaltado)",
-            # Estilo con borde para no ocultar el mapa de calor
+            name="🎯 Secciones Muestreadas",
             style_function=lambda x: {
-                'fillColor': 'none',        # Sin color de relleno
-                'color': '#E32051',         # Color del borde (rojo brillante)
-                'weight': 2.5               # Grosor del borde para que sea muy visible
+                'fillColor': '#ff4444', 
+                'fillOpacity': 0.7, 
+                'color': 'darkred', 
+                'weight': 2
             },
             tooltip=folium.GeoJsonTooltip(
                 fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', "TOTAL LISTA NOMINAL"],
-                aliases=['Sección:', 'Municipio:', 'Padrón:', 'Lista Nominal:'],
-                style=("background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;")
+                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal'],
+                localize=True
             ),
-            show=True # La capa de resaltado se muestra por defecto
+            show=True
         ).add_to(m)
     
-    # Añadir el control de capas y renderizar el mapa final UNA SOLA VEZ
     folium.LayerControl().add_to(m)
-    st_folium(m, use_container_width=True, height=700)
+    st_folium(m, width=1400, height=700, returned_objects=[])
 
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
