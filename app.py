@@ -11,10 +11,12 @@ import io
 # Configuración de la página
 st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
 
-# Rutas de archivos (relativas al directorio de app.py)
-csv_path = "data/consolidado_seleccion.csv"
-shp_path = "data/SECCION.shp"
-sample_path = "data/plan_de_campo.csv"
+
+# Asegúrate de que estas rutas sean correctas para tu despliegue
+BASE_PATH = "data"
+csv_path = os.path.join(BASE_PATH, "consolidado_seleccion.csv")
+shp_path = os.path.join(BASE_PATH, "SECCION.shp")
+sample_path = os.path.join(BASE_PATH, "plan_de_campo.csv")
 
 # Verificar que los archivos existen (para depuración)
 for path in [csv_path, shp_path, sample_path]:
@@ -28,59 +30,59 @@ def load_data():
     df = pd.read_csv(csv_path)
     gdf = gpd.read_file(shp_path)
     df_sample = pd.read_csv(sample_path)
+    # --- CORRECCIÓN 1: Asegurar que la base principal no tenga duplicados ---
+    df.drop_duplicates(subset=['SECCIÓN'], keep='first', inplace=True)
+    
     # Asegurar tipos consistentes
     df['SECCIÓN'] = df['SECCIÓN'].astype(str)
     gdf['SECCION'] = gdf['SECCION'].astype(str)
     df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str)
+  
     # Merge CSV con shapefile
-    merged_gdf = gdf.merge(df, left_on='SECCION', right_on='SECCIÓN', how='inner')
-    # Marcar secciones muestreadas y agregar número de encuestas
-    merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])
-    merged_gdf = merged_gdf.merge(df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left')
-    merged_gdf['ENCUESTAS_ASIGNADAS'] = merged_gdf['ENCUESTAS_ASIGNADAS'].fillna(0).astype(int)
-    # Asegurar proyección EPSG:4326
-    if merged_gdf.crs != "EPSG:4326":
-        merged_gdf = merged_gdf.to_crs(epsg=4326)
+    merged_gdf = df.merge(gdf, left_on='SECCIÓN', right_on='SECCION', how='left')
+# Convertir de nuevo a GeoDataFrame para que la geometría sea utilizable
+    merged_gdf = gpd.GeoDataFrame(merged_gdf, geometry='geometry')
+# Crear la columna 'is_sampled' para identificar fácilmente las secciones en muestra
+    secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
+    merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     return df, merged_gdf, df_sample
 
-df, merged_gdf, df_sample = load_data()
+# Cargar los datos usando la función
+try:
+    df, merged_gdf, df_sample = load_data()
+except FileNotFoundError as e:
+    st.error(f"Error al cargar archivos: {e}. Asegúrate de que los archivos estén en la carpeta 'data'.")
+    st.stop()
 
-# Barra lateral para filtros
-st.sidebar.title("🔍 Filtros de Visualización")
-distrito_options = ['Todos'] + sorted(df['Distrito'].unique().tolist())
-selected_distrito = st.sidebar.selectbox("Distrito", distrito_options)
+# --- Sidebar de Filtros (mejorado) ---
+st.sidebar.header("Filtros de Visualización")
 
-# Filtro de Municipio
+# --- CORRECCIÓN 3: Los filtros se basan en el DataFrame completo `df` ---
+# Esto asegura que todos los distritos y municipios siempre estén en la lista.
+distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
+selected_distrito = st.sidebar.selectbox("Filtrar por Distrito", distritos_unicos)
+
 if selected_distrito != 'Todos':
-    municipio_options = ['Todos'] + sorted(df[df['Distrito'] == selected_distrito]['MUNICIPIOS'].unique().tolist())
+    municipios_filtrados = sorted(df[df['Distrito'] == selected_distrito]['MUNICIPIOS'].unique())
 else:
-    municipio_options = ['Todos'] + sorted(df['MUNICIPIOS'].unique().tolist())
-selected_municipio = st.sidebar.selectbox("Municipio", municipio_options)
-
-# Filtro de secciones muestreadas
-st.sidebar.markdown("---")
-show_sampled = st.sidebar.checkbox("🎯 Solo secciones muestreadas", value=False)
-
-# Filtrar datos
-filtered_df = df.copy()
+    municipios_filtrados = sorted(df['MUNICIPIOS'].unique())
+    
+municipios_unicos = ['Todos'] + municipios_filtrados
+selected_municipio = st.sidebar.selectbox("Filtrar por Municipio", municipios_unicos)
+show_sampled = st.sidebar.checkbox("Mostrar solo secciones en muestra en el mapa")
+# --- Aplicar filtros a los datos ---
 filtered_gdf = merged_gdf.copy()
-
 if selected_distrito != 'Todos':
-    filtered_df = filtered_df[filtered_df['Distrito'] == selected_distrito]
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
 if selected_municipio != 'Todos':
-    filtered_df = filtered_df[filtered_df['MUNICIPIOS'] == selected_municipio]
     filtered_gdf = filtered_gdf[filtered_gdf['MUNICIPIOS'] == selected_municipio]
-if show_sampled:
-    filtered_df = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])]
-    filtered_gdf = filtered_gdf[filtered_gdf['is_sampled']]
 
 # Calcular métricas
-total_secciones = filtered_df['SECCIÓN'].nunique()
-secciones_muestreadas = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])]['SECCIÓN'].nunique()
+total_secciones = filtered_gdf['SECCIÓN'].nunique()
+secciones_muestreadas = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['SECCIÓN'].nunique()
 tasa_muestreo = (secciones_muestreadas / total_secciones * 100) if total_secciones > 0 else 0
-total_lista = filtered_df['TOTAL LISTA NOMINAL'].sum()
-lista_muestra = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])]['TOTAL LISTA NOMINAL'].sum()
+total_lista = filtered_gdf['TOTAL LISTA NOMINAL'].sum()
+lista_muestra = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['TOTAL LISTA NOMINAL'].sum()
 cobertura_poblacional = (lista_muestra / total_lista * 100) if total_lista > 0 else 0
 
 if show_sampled:
@@ -170,15 +172,16 @@ with tab2:
     st.header("📈 Métricas Principales")
     
     # Métricas superiores
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Municipios", filtered_df['MUNICIPIOS'].nunique())
-    col2.metric("Total Secciones", total_secciones)
-    col3.metric("Total Lista Nominal", f"{total_lista:,}")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Secciones en Guerrero", df['SECCIÓN'].nunique())
+    col2.metric("Secciones Mapeadas", int(merged_gdf['geometry'].notna().sum()))
+    col3.metric("Secciones en Muestra", len(df_sample))
+    col4.metric("Total Encuestas a Realizar", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
     
-    col4, col5, col6 = st.columns(3)
-    col4.metric("Secciones Muestreadas", secciones_muestreadas, delta=f"{tasa_muestreo:.1f}% del total")
-    col5.metric("Total Encuestas", int(total_encuestas))
-    col6.metric("Promedio Encuestas/Sección", f"{promedio_encuestas:.1f}")
+    col5, col6, col7 = st.columns(3)
+    col5.metric("Secciones Muestreadas", secciones_muestreadas, delta=f"{tasa_muestreo:.1f}% del total")
+    col6.metric("Total Encuestas", int(total_encuestas))
+    col7.metric("Promedio Encuestas/Sección", f"{promedio_encuestas:.1f}")
     
     st.markdown("---")
     
@@ -316,8 +319,8 @@ with tab3:
                 'weight': 2
             },
             tooltip=folium.GeoJsonTooltip(
-                fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS'],
-                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal', 'Encuestas Asignadas'],
+                fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', "TOTAL LISTA NOMINAL"],
+                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal'],
                 localize=True
             ),
             show=True
@@ -333,12 +336,12 @@ with tab4:
     # Gráfica 1: Cobertura de muestra por municipio
     st.subheader("Cobertura de Secciones por Municipio")
     
-    munic_stats = filtered_df.groupby('MUNICIPIOS').agg({
+    munic_stats = filtered_gdf.groupby('MUNICIPIOS').agg({
         'SECCIÓN': 'nunique'
     }).reset_index()
     munic_stats.columns = ['Municipio', 'Total_Secciones']
     
-    munic_sample = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])].groupby('MUNICIPIOS').agg({
+    munic_sample = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].groupby('MUNICIPIOS').agg({
         'SECCIÓN': 'nunique'
     }).reset_index()
     munic_sample.columns = ['Municipio', 'Secciones_Muestreadas']
@@ -378,7 +381,7 @@ with tab4:
     st.subheader("Validación de Asignación de Encuestas")
     st.markdown("Esta gráfica permite verificar si la asignación de encuestas es proporcional al tamaño de cada sección.")
     
-    scatter_data = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
+    scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
         df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
     )
     
@@ -421,7 +424,7 @@ with tab5:
     st.header("💾 Tabla de Secciones Muestreadas")
     
     # Preparar tabla
-    sample_display = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])][
+    sample_display = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])][
         ['SECCIÓN', 'MUNICIPIOS', 'Distrito', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL']
     ].merge(
         df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
