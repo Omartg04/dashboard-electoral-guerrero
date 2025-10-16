@@ -196,7 +196,7 @@ with tab2:
             mode = "gauge+number+delta",
             value = tasa_muestreo,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Tasa de Muestreo<br>(% Secciones)"},
+            title = {'text': "Tasa de Muestreo (% Secciones)"},
             delta = {'reference': 10},
             gauge = {
                 'axis': {'range': [None, 100]},
@@ -217,7 +217,7 @@ with tab2:
             mode = "gauge+number",
             value = cobertura_poblacional,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Cobertura Poblacional <br>(% Lista Nominal)"},
+            title = {'text': "Cobertura Poblacional (% Lista Nominal)"},
             gauge = {
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkgreen"},
@@ -263,39 +263,71 @@ with tab2:
         fig_encuestas.update_layout(showlegend=False)
         st.plotly_chart(fig_encuestas, use_container_width=True)
 
-# ==================== TAB 3: MAPA INTERACTIVO (MODO DIAGNÓSTICO) ====================
+# ==================== TAB 3: MAPA INTERACTIVO ====================
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
-
-    st.info("--- INICIO DE DIAGNÓSTICO ---")
-
-    # 1. Inspeccionar el DataFrame DESPUÉS de los filtros de distrito/municipio
-    st.write(f"1. Después de filtrar por distrito/municipio, `filtered_gdf` tiene: **{len(filtered_gdf)} filas**.")
     
-    # 2. Revisar si hay geometrías válidas
-    geometrias_validas = filtered_gdf['geometry'].notna().sum()
-    st.write(f"2. De esas filas, **{geometrias_validas} tienen una geometría válida** (no nula).")
-
-    # 3. Crear la variable para el mapa y eliminar las geometrías nulas
-    map_display_data = filtered_gdf.dropna(subset=['geometry'])
-    st.write(f"3. Después de eliminar filas sin geometría, `map_display_data` tiene: **{len(map_display_data)} filas**.")
-
-    # 4. Comprobar si el DataFrame final está vacío
-    if map_display_data.empty:
-        st.error("EL PROBLEMA ESTÁ AQUÍ: El DataFrame para dibujar el mapa está vacío. No se puede dibujar nada.")
-    else:
-        st.success("El DataFrame para el mapa tiene datos. El problema podría ser el centrado o el dibujado.")
-        
-        # 5. Calcular y mostrar el centro del mapa
-        map_center = [map_display_data.geometry.centroid.y.mean(), map_display_data.geometry.centroid.x.mean()]
-        st.write(f"5. El centro calculado para el mapa es: **{map_center}**")
-        
-        # Crear y mostrar el mapa (código simplificado para la prueba)
-        m = folium.Map(location=map_center, zoom_start=8, tiles="CartoDB positron")
-        folium.GeoJson(map_display_data).add_to(m)
-        st_folium(m, use_container_width=True, height=500)
-
-    st.info("--- FIN DE DIAGNÓSTICO ---")
+    # Opciones de visualización del mapa
+    col_map1, col_map2 = st.columns([3, 1])
+    with col_map2:
+        st.markdown("**Controles:**")
+        st.markdown("- Usa el control de capas en el mapa")
+        st.markdown("- Haz clic en las secciones para ver detalles")
+        st.markdown("- Zoom con scroll o botones")
+    
+    # Crear mapa
+    m = folium.Map(location=[17.55, -99.50], zoom_start=8, tiles="CartoDB positron")
+    
+    # Capa para TOTAL PADRÓN
+    folium.Choropleth(
+        geo_data=filtered_gdf,
+        name="🔵 Total Padrón",
+        data=filtered_gdf,
+        columns=['SECCIÓN', 'TOTAL PADRÓN'],
+        key_on='feature.properties.SECCIÓN',
+        fill_color='YlOrRd',
+        fill_opacity=0.6,
+        line_opacity=0.3,
+        legend_name='Total Padrón',
+        show=True
+    ).add_to(m)
+    
+    # Capa para TOTAL LISTA NOMINAL
+    folium.Choropleth(
+        geo_data=filtered_gdf,
+        name="🟢 Total Lista Nominal",
+        data=filtered_gdf,
+        columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
+        key_on='feature.properties.SECCIÓN',
+        fill_color='BuGn',
+        fill_opacity=0.6,
+        line_opacity=0.3,
+        legend_name='Total Lista Nominal',
+        show=False
+    ).add_to(m)
+    
+    # Capa para secciones muestreadas con tooltip enriquecido
+    sampled_sections = filtered_gdf[filtered_gdf['is_sampled']].copy()
+    if not sampled_sections.empty:
+        folium.GeoJson(
+            sampled_sections,
+            name="🎯 Secciones Muestreadas",
+            style_function=lambda x: {
+                'fillColor': '#ff4444', 
+                'fillOpacity': 0.7, 
+                'color': 'darkred', 
+                'weight': 2
+            },
+            tooltip=folium.GeoJsonTooltip(
+                fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', "TOTAL LISTA NOMINAL"],
+                aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal'],
+                localize=True
+            ),
+            show=True
+        ).add_to(m)
+    
+    folium.LayerControl().add_to(m)
+    st_folium(m, width=1400, height=700, returned_objects=[])
 
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
