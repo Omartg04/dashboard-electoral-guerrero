@@ -86,7 +86,7 @@ lista_muestra = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN']
 cobertura_poblacional = (lista_muestra / total_lista * 100) if total_lista > 0 else 0
 
 if show_sampled:
-    total_encuestas = filtered_df[filtered_df['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
+    total_encuestas = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
         df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
     )['ENCUESTAS_ASIGNADAS'].sum()
 else:
