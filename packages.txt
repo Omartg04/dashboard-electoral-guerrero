@@ -2,4 +2,4 @@ gdal-bin
 libgeos-dev
 libproj-dev
 libspatialindex-dev
-libproj-data
+proj-data
