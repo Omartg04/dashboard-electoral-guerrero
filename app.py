@@ -263,116 +263,125 @@ with tab2:
         fig_encuestas.update_layout(showlegend=False)
         st.plotly_chart(fig_encuestas, use_container_width=True)
 
-# ==================== TAB 3: MAPA INTERACTIVO ====================
+# AGREGA ESTE CÓDIGO JUSTO ANTES DEL TAB 3 (después de la línea del st.tabs)
+# Esto es para diagnosticar el problema
+
+# Después de crear los tabs, agrega esto:
+with st.expander("🔍 DEBUG - Ver información de datos (temporal)"):
+    st.write("### Información de filtered_gdf:")
+    st.write(f"- Total filas: {len(filtered_gdf)}")
+    st.write(f"- Tiene geometría: {filtered_gdf['geometry'].notna().sum()}")
+    st.write(f"- CRS del GeoDataFrame: {filtered_gdf.crs if hasattr(filtered_gdf, 'crs') else 'No tiene CRS'}")
+    
+    if not filtered_gdf.empty:
+        st.write(f"- Columnas: {list(filtered_gdf.columns)}")
+        st.write(f"- Primeras 3 filas:")
+        st.dataframe(filtered_gdf[['SECCIÓN', 'MUNICIPIOS', 'Distrito', 'geometry']].head(3))
+        
+        # Verificar geometrías
+        geom_sample = filtered_gdf[filtered_gdf['geometry'].notna()].head(1)
+        if not geom_sample.empty:
+            st.write(f"- Ejemplo de geometría: {geom_sample.iloc[0]['geometry']}")
+            st.write(f"- Tipo de geometría: {geom_sample.iloc[0]['geometry'].geom_type}")
+            
+            # Verificar bounds
+            try:
+                bounds = filtered_gdf[filtered_gdf['geometry'].notna()].total_bounds
+                st.write(f"- Bounds [minx, miny, maxx, maxy]: {bounds}")
+                st.write(f"- Centro calculado: lat={(bounds[1] + bounds[3]) / 2}, lon={(bounds[0] + bounds[2]) / 2}")
+            except Exception as e:
+                st.error(f"Error al calcular bounds: {e}")
+    
+    st.write("### Información de merged_gdf completo:")
+    st.write(f"- Total filas: {len(merged_gdf)}")
+    st.write(f"- Tiene geometría: {merged_gdf['geometry'].notna().sum()}")
+    st.write(f"- Es GeoDataFrame: {isinstance(merged_gdf, gpd.GeoDataFrame)}")
+    
+    st.write("### Información del shapefile original:")
+    st.write(f"- Total filas en gdf original: {len(gpd.read_file(shp_path))}")
+    st.write(f"- CRS original: {gpd.read_file(shp_path).crs}")
+
+
+# ==================== TAB 3: MAPA INTERACTIVO (VERSIÓN SIMPLIFICADA) ====================
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
     
-    # Opciones de visualización del mapa
-    col_map1, col_map2 = st.columns([3, 1])
-    with col_map2:
-        st.markdown("**Controles:**")
-        st.markdown("- Usa el control de capas en el mapa")
-        st.markdown("- Haz clic en las secciones para ver detalles")
-        st.markdown("- Zoom con scroll o botones")
+    st.info(f"Filtros activos - Distrito: {selected_distrito}, Municipio: {selected_municipio}, Solo muestra: {show_sampled}")
     
-    # Preparar datos para el mapa según filtros
-    map_data = filtered_gdf.copy()
+    # Preparar datos para el mapa
+    map_data = filtered_gdf[filtered_gdf['geometry'].notna()].copy()
     
-    # Si el checkbox está activado, filtrar solo secciones muestreadas
+    st.write(f"📊 Datos para mapa: {len(map_data)} secciones con geometría")
+    
     if show_sampled:
         map_data = map_data[map_data['is_sampled']]
+        st.write(f"🎯 Después de filtrar muestra: {len(map_data)} secciones")
     
-    # Verificar que hay datos para mostrar
-    if map_data.empty or map_data['geometry'].isna().all():
-        st.warning("⚠️ No hay datos geográficos disponibles para los filtros seleccionados.")
+    # Verificar que hay datos
+    if map_data.empty:
+        st.error("❌ No hay datos geográficos para mostrar con los filtros actuales")
+        st.write("Intenta:")
+        st.write("- Cambiar los filtros a 'Todos'")
+        st.write("- Desactivar 'Mostrar solo secciones en muestra'")
     else:
-        # Calcular el centro del mapa basado en los datos filtrados
-        bounds = map_data.total_bounds  # [minx, miny, maxx, maxy]
-        center_lat = (bounds[1] + bounds[3]) / 2
-        center_lon = (bounds[0] + bounds[2]) / 2
-        
-        # Crear mapa centrado en los datos filtrados
-        m = folium.Map(
-            location=[center_lat, center_lon], 
-            zoom_start=9, 
-            tiles="CartoDB positron"
-        )
-        
-        # Capa para TOTAL PADRÓN
-        if not map_data.empty:
-            folium.Choropleth(
-                geo_data=map_data,
-                name="🔵 Total Padrón",
-                data=map_data,
-                columns=['SECCIÓN', 'TOTAL PADRÓN'],
-                key_on='feature.properties.SECCIÓN',
-                fill_color='YlOrRd',
-                fill_opacity=0.6,
-                line_opacity=0.3,
-                legend_name='Total Padrón',
-                show=True
-            ).add_to(m)
-        
-        # Capa para TOTAL LISTA NOMINAL
-        if not map_data.empty:
-            folium.Choropleth(
-                geo_data=map_data,
-                name="🟢 Total Lista Nominal",
-                data=map_data,
-                columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
-                key_on='feature.properties.SECCIÓN',
-                fill_color='BuGn',
-                fill_opacity=0.6,
-                line_opacity=0.3,
-                legend_name='Total Lista Nominal',
-                show=False
-            ).add_to(m)
-        
-        # Capa para secciones muestreadas con tooltip enriquecido
-        sampled_sections = map_data[map_data['is_sampled']].copy()
-        
-        if not sampled_sections.empty:
-            # Agregar información de encuestas a las secciones muestreadas
-            sampled_sections = sampled_sections.merge(
-                df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], 
-                on='SECCIÓN', 
-                how='left'
+        try:
+            # Calcular bounds
+            bounds = map_data.total_bounds
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
+            
+            st.success(f"✅ Centro del mapa: lat={center_lat:.4f}, lon={center_lon:.4f}")
+            
+            # Crear mapa simple
+            m = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=10,
+                tiles="OpenStreetMap"
             )
             
+            # Agregar SOLO las geometrías sin choropleth primero
             folium.GeoJson(
-                sampled_sections,
-                name="🎯 Secciones Muestreadas",
+                map_data,
+                name="Todas las secciones",
                 style_function=lambda x: {
-                    'fillColor': '#ff4444', 
-                    'fillOpacity': 0.7, 
-                    'color': 'darkred', 
-                    'weight': 2
+                    'fillColor': 'blue',
+                    'color': 'black',
+                    'weight': 1,
+                    'fillOpacity': 0.3
                 },
                 tooltip=folium.GeoJsonTooltip(
-                    fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS'],
-                    aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal', 'Encuestas Asignadas'],
-                    localize=True
-                ),
-                show=True
+                    fields=['SECCIÓN', 'MUNICIPIOS'],
+                    aliases=['Sección', 'Municipio']
+                )
             ).add_to(m)
-        
-        # Agregar control de capas
-        folium.LayerControl().add_to(m)
-        
-        # Ajustar el mapa a los límites de los datos
-        m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-        
-        # Renderizar el mapa
-        st_folium(m, width=1400, height=700, returned_objects=[])
-        
-        # Mostrar estadísticas del área visible
-        st.markdown("---")
-        col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
-        col_stat1.metric("Secciones visibles", len(map_data))
-        col_stat2.metric("Secciones muestreadas visibles", len(sampled_sections) if not sampled_sections.empty else 0)
-        col_stat3.metric("Población total (Lista Nominal)", f"{map_data['TOTAL LISTA NOMINAL'].sum():,.0f}")
-        if not sampled_sections.empty:
-            col_stat4.metric("Encuestas en área visible", int(sampled_sections['ENCUESTAS_ASIGNADAS'].sum()))
+            
+            # Agregar secciones muestreadas en rojo
+            sampled = map_data[map_data['is_sampled']]
+            if not sampled.empty:
+                folium.GeoJson(
+                    sampled,
+                    name="Secciones Muestreadas",
+                    style_function=lambda x: {
+                        'fillColor': 'red',
+                        'color': 'darkred',
+                        'weight': 2,
+                        'fillOpacity': 0.7
+                    },
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=['SECCIÓN', 'MUNICIPIOS'],
+                        aliases=['Sección', 'Municipio']
+                    )
+                ).add_to(m)
+            
+            folium.LayerControl().add_to(m)
+            
+            # Renderizar
+            st_folium(m, width=1400, height=700)
+            
+        except Exception as e:
+            st.error(f"❌ Error al crear el mapa: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
