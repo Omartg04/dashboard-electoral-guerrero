@@ -283,24 +283,24 @@ with tab1:
         st.markdown("""
         **Barra lateral izquierda (Filtros):**
         
-        1. **📍 Distrito:** Selecciona un distrito específico o "Todos" para ver todo el estado
-           - *Ejemplo:* Si seleccionas "Distrito 1", solo verás datos de ese distrito
+        1. **Distrito:** Selecciona un distrito específico o "Todos" para ver todo el estado
+           - Ejemplo: Si seleccionas "Distrito 1", solo verás datos de ese distrito
            
-        2. **🏘️ Municipio:** Filtra por municipio específico
-           - *Nota:* Los municipios disponibles cambian según el distrito seleccionado
+        2. **Municipio:** Filtra por municipio específico
+           - Nota: Los municipios disponibles cambian según el distrito seleccionado
            - Si Distrito = "Todos", verás todos los municipios
            
-        3. **📊 Estado de Captura:** Filtra las secciones según su progreso
-           - ✅ **Completada:** Secciones donde se terminó el trabajo de campo
-           - 🔄 **En Proceso:** Secciones con encuestas parciales
-           - ⏳ **Pendiente:** Secciones aún no iniciadas
-           - *Puedes seleccionar múltiples estados*
+        3. **Estado de Captura:** Filtra las secciones según su progreso
+           - Completada: Secciones donde se terminó el trabajo de campo
+           - En Proceso: Secciones con encuestas parciales
+           - Pendiente: Secciones aún no iniciadas
+           - Puedes seleccionar múltiples estados
         
-        4. **☑️ Mostrar solo secciones en muestra:** 
+        4. **Mostrar solo secciones en muestra:** 
            - Activado: Muestra únicamente las 400 secciones seleccionadas para encuestar
            - Desactivado: Muestra todas las secciones del estado
         
-        **⚡ Los filtros se aplican automáticamente** a todas las pestañas del dashboard.
+        Los filtros se aplican automáticamente a todas las pestañas del dashboard.
         """)
         
         # Ejemplo visual de cómo funcionan los filtros
@@ -322,8 +322,7 @@ with tab1:
             - Estado = Solo "Completada" ✓
             - ✓ Activar "Mostrar solo secciones en muestra"
             """)
-        """)
-    
+        
     with col_inst2:
         st.subheader("🔑 Navegación por pestañas")
         st.markdown("""
@@ -342,12 +341,12 @@ with tab1:
         - Cobertura por municipio
         - Validación de asignación de encuestas
         
-        **📱 Validación de Contactos** ⭐ NUEVO
+        **📱 Validación de Contactos (NUEVO)**
         - Calidad de emails y celulares
         - Tasas de verificación por sección
         - Directorio confiable
         
-        **👥 Control de Calidad** ⭐ NUEVO
+        **👥 Control de Calidad (NUEVO)**
         - Desempeño de encuestadores
         - Métricas de productividad
         - Alertas de bajo rendimiento
