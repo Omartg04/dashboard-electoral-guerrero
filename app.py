@@ -809,18 +809,9 @@ with tab6:
     # Tabla detallada
     st.subheader("📋 Detalle de Desempeño por Encuestador")
     
-    # Aplicar formato condicional
+    # Mostrar tabla simple
     st.dataframe(
-        encuestador_stats.style.background_gradient(
-            subset=['Score Global', 'Calidad Promedio'], 
-            cmap='RdYlGn'
-        ).format({
-            'Calidad Promedio': '{:.1f}',
-            'Tiempo Promedio (min)': '{:.1f}',
-            '% Email Válido': '{:.1f}%',
-            '% Celular Válido': '{:.1f}%',
-            'Score Global': '{:.1f}'
-        }),
+        encuestador_stats.round(2),
         use_container_width=True,
         height=400
     )
