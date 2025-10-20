@@ -7,10 +7,11 @@ import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
 import io
+import numpy as np
+from datetime import datetime, timedelta
 
 # Configuración de la página
 st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
-
 
 # Asegúrate de que estas rutas sean correctas para tu despliegue
 BASE_PATH = "data"
@@ -31,7 +32,7 @@ def load_data():
     gdf = gpd.read_file(shp_path)
     df_sample = pd.read_csv(sample_path)
     
-    # --- CORRECCIÓN 1: Asegurar que la base principal no tenga duplicados ---
+    # Asegurar que la base principal no tenga duplicados
     df.drop_duplicates(subset=['SECCIÓN'], keep='first', inplace=True)
     
     # Asegurar tipos consistentes
@@ -39,19 +40,72 @@ def load_data():
     gdf['SECCION'] = gdf['SECCION'].astype(str)
     df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str)
     
-    # *** CORRECCIÓN CRÍTICA: Reproyectar a EPSG:4326 para Folium ***
+    # Reproyectar a EPSG:4326 para Folium
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
   
     # Merge CSV con shapefile
     merged_gdf = df.merge(gdf, left_on='SECCIÓN', right_on='SECCION', how='left')
     
-    # Convertir de nuevo a GeoDataFrame para que la geometría sea utilizable
+    # Convertir de nuevo a GeoDataFrame
     merged_gdf = gpd.GeoDataFrame(merged_gdf, geometry='geometry', crs="EPSG:4326")
     
-    # Crear la columna 'is_sampled' para identificar fácilmente las secciones en muestra
+    # Crear la columna 'is_sampled'
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
+    
+    # ===== DATOS SIMULADOS PARA MOCKUP =====
+    np.random.seed(42)
+    
+    # 1. PROGRESO DE CAPTURA (Fase 2-3)
+    n_secciones = len(df_sample)
+    estados_captura = np.random.choice(
+        ['Completada', 'En Proceso', 'Pendiente'], 
+        size=n_secciones,
+        p=[0.60, 0.25, 0.15]  # 60% completado, 25% en proceso, 15% pendiente
+    )
+    df_sample['STATUS_CAPTURA'] = estados_captura
+    
+    # Encuestas realizadas (menor o igual a las asignadas)
+    df_sample['ENCUESTAS_REALIZADAS'] = df_sample.apply(
+        lambda x: x['ENCUESTAS_ASIGNADAS'] if x['STATUS_CAPTURA'] == 'Completada' 
+        else int(x['ENCUESTAS_ASIGNADAS'] * np.random.uniform(0.3, 0.9)) if x['STATUS_CAPTURA'] == 'En Proceso'
+        else 0,
+        axis=1
+    )
+    
+    # Fecha de última actualización (últimos 7 días)
+    fecha_base = datetime.now()
+    df_sample['ULTIMA_ACTUALIZACION'] = [
+        fecha_base - timedelta(days=np.random.randint(0, 8)) for _ in range(n_secciones)
+    ]
+    
+    # 2. VALIDACIÓN DE CONTACTOS (Fase 4)
+    # Porcentaje de emails válidos
+    df_sample['PCT_EMAIL_VALIDO'] = np.random.uniform(70, 95, n_secciones).round(1)
+    df_sample['PCT_CELULAR_VALIDO'] = np.random.uniform(75, 98, n_secciones).round(1)
+    
+    # Números absolutos
+    df_sample['EMAILS_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS'] * df_sample['PCT_EMAIL_VALIDO'] / 100).astype(int)
+    df_sample['CELULARES_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS'] * df_sample['PCT_CELULAR_VALIDO'] / 100).astype(int)
+    
+    # 3. ENCUESTADORES (Fase 5)
+    encuestadores = ['Juan Pérez', 'María González', 'Carlos Ramírez', 'Ana López', 
+                     'Luis Martínez', 'Sofia Torres', 'Diego Hernández', 'Laura Sánchez']
+    df_sample['ENCUESTADOR'] = np.random.choice(encuestadores, n_secciones)
+    
+    # Calidad del encuestador (score 0-100)
+    df_sample['CALIDAD_DATOS'] = np.random.uniform(60, 100, n_secciones).round(1)
+    
+    # Tiempo promedio por encuesta (minutos)
+    df_sample['TIEMPO_PROMEDIO_MIN'] = np.random.uniform(8, 25, n_secciones).round(1)
+    
+    # Actualizar merged_gdf con información de progreso
+    merged_gdf = merged_gdf.merge(
+        df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_REALIZADAS', 'ENCUESTADOR']], 
+        on='SECCIÓN', 
+        how='left'
+    )
     
     return df, merged_gdf, df_sample
 
@@ -62,11 +116,9 @@ except FileNotFoundError as e:
     st.error(f"Error al cargar archivos: {e}. Asegúrate de que los archivos estén en la carpeta 'data'.")
     st.stop()
 
-# --- Sidebar de Filtros (mejorado) ---
+# --- Sidebar de Filtros ---
 st.sidebar.header("Filtros de Visualización")
 
-# --- CORRECCIÓN 3: Los filtros se basan en el DataFrame completo `df` ---
-# Esto asegura que todos los distritos y municipios siempre estén en la lista.
 distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
 selected_distrito = st.sidebar.selectbox("Filtrar por Distrito", distritos_unicos)
 
@@ -77,13 +129,33 @@ else:
     
 municipios_unicos = ['Todos'] + municipios_filtrados
 selected_municipio = st.sidebar.selectbox("Filtrar por Municipio", municipios_unicos)
+
+# NUEVO: Filtro por estado de captura
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Filtros de Progreso")
+status_filter = st.sidebar.multiselect(
+    "Estado de Captura",
+    ['Completada', 'En Proceso', 'Pendiente'],
+    default=['Completada', 'En Proceso', 'Pendiente']
+)
+
 show_sampled = st.sidebar.checkbox("Mostrar solo secciones en muestra en el mapa")
+
 # --- Aplicar filtros a los datos ---
 filtered_gdf = merged_gdf.copy()
 if selected_distrito != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
 if selected_municipio != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['MUNICIPIOS'] == selected_municipio]
+
+# Filtrar df_sample también
+filtered_sample = df_sample.copy()
+if selected_distrito != 'Todos':
+    filtered_sample = filtered_sample[filtered_sample['Distrito'] == selected_distrito]
+if selected_municipio != 'Todos':
+    filtered_sample = filtered_sample[filtered_sample['MUNICIPIOS'] == selected_municipio]
+if status_filter:
+    filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
 
 # Calcular métricas
 total_secciones = filtered_gdf['SECCIÓN'].nunique()
@@ -93,25 +165,73 @@ total_lista = filtered_gdf['TOTAL LISTA NOMINAL'].sum()
 lista_muestra = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['TOTAL LISTA NOMINAL'].sum()
 cobertura_poblacional = (lista_muestra / total_lista * 100) if total_lista > 0 else 0
 
-if show_sampled:
-    total_encuestas = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
-        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
-    )['ENCUESTAS_ASIGNADAS'].sum()
-else:
-    total_encuestas = df_sample['ENCUESTAS_ASIGNADAS'].sum()
-
-promedio_encuestas = (total_encuestas / secciones_muestreadas) if secciones_muestreadas > 0 else 0
+# NUEVAS MÉTRICAS DE PROGRESO
+total_encuestas_asignadas = filtered_sample['ENCUESTAS_ASIGNADAS'].sum()
+total_encuestas_realizadas = filtered_sample['ENCUESTAS_REALIZADAS'].sum()
+progreso_captura = (total_encuestas_realizadas / total_encuestas_asignadas * 100) if total_encuestas_asignadas > 0 else 0
 
 # Título principal
 st.title("📊 Dashboard Electoral - Guerrero")
 st.markdown(f"**Vista actual:** {selected_distrito} {'→ ' + selected_municipio if selected_municipio != 'Todos' else ''}")
 
-# Sistema de Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Instrucciones", "📈 Resumen Ejecutivo", "🗺️ Mapa Interactivo", "📊 Análisis de Cobertura", "💾 Datos y Descarga"])
+# DISCLAIMER MOCKUP
+st.info("ℹ️ **Dashboard demostrativo con datos simulados.** Los datos reales se integrarán desde el portal de captura en producción.")
 
-# ==================== TAB 1: INSTRUCCIONES ====================
+# Sistema de Tabs - ACTUALIZADO
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📋 Instrucciones", 
+    "📈 Resumen Ejecutivo", 
+    "🗺️ Mapa Interactivo", 
+    "📊 Análisis de Cobertura",
+    "📱 Validación de Contactos",
+    "👥 Control de Calidad",
+    "💾 Datos y Descarga"
+])
+
+# ==================== TAB 1: INSTRUCCIONES (ACTUALIZADO) ====================
 with tab1:
     st.header("📋 Instrucciones de Uso")
+    
+    # NUEVO: Timeline del proyecto
+    st.subheader("🎯 Flujo del Proyecto Electoral")
+    
+    timeline_fig = go.Figure()
+    
+    fases = [
+        {"fase": "1. Diseño de Muestra", "status": "✅", "color": "green"},
+        {"fase": "2. Captura en Campo", "status": "🔄", "color": "orange"},
+        {"fase": "3. Base de Datos", "status": "🔄", "color": "orange"},
+        {"fase": "4. Validación Contactos", "status": "🔄", "color": "orange"},
+        {"fase": "5. Auditoría Calidad", "status": "⏳", "color": "gray"},
+        {"fase": "6. Perfilamiento", "status": "⏳", "color": "gray"}
+    ]
+    
+    for i, fase_info in enumerate(fases):
+        timeline_fig.add_trace(go.Scatter(
+            x=[i], y=[0],
+            mode='markers+text',
+            marker=dict(size=30, color=fase_info['color']),
+            text=fase_info['status'],
+            textposition="middle center",
+            textfont=dict(size=14, color='white'),
+            name=fase_info['fase'],
+            hovertemplate=f"<b>{fase_info['fase']}</b><br>Estado: {fase_info['status']}<extra></extra>"
+        ))
+    
+    timeline_fig.update_layout(
+        showlegend=True,
+        height=200,
+        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=0, r=0, t=20, b=0)
+    )
+    
+    st.plotly_chart(timeline_fig, use_container_width=True)
+    
+    st.markdown("**Leyenda:** ✅ Completado | 🔄 En Progreso | ⏳ Pendiente")
+    
+    st.markdown("---")
     
     col_inst1, col_inst2 = st.columns(2)
     
@@ -121,8 +241,10 @@ with tab1:
         Este dashboard permite visualizar y analizar:
         - **Distribución electoral** en el estado de Guerrero
         - **Plan de muestreo** de 400 secciones para encuestas
+        - **Progreso en tiempo real** de la captura de datos
+        - **Validación de contactos** (emails y celulares)
+        - **Control de calidad** por encuestador
         - **Cobertura geográfica y poblacional** de la muestra
-        - **Asignación de encuestas** por sección
         """)
         
         st.subheader("🔍 Cómo usar los filtros")
@@ -130,120 +252,163 @@ with tab1:
         **Barra lateral izquierda:**
         1. **Distrito:** Filtra por distrito electoral
         2. **Municipio:** Filtra por municipio específico
-        3. **☑️ Solo secciones muestreadas:** Muestra únicamente las 400 secciones seleccionadas
+        3. **Estado de Captura:** Filtra por progreso (Completada/En Proceso/Pendiente)
+        4. **☑️ Solo secciones muestreadas:** Muestra únicamente las 400 secciones seleccionadas
         
         Los filtros se aplican automáticamente a todas las pestañas.
         """)
     
     with col_inst2:
-        st.subheader("📑 Navegación por pestañas")
+        st.subheader("🔑 Navegación por pestañas")
         st.markdown("""
         **📈 Resumen Ejecutivo**
         - Métricas clave del proyecto
+        - Progreso de captura en tiempo real
         - Indicadores de cobertura
-        - Estadísticas generales
         
         **🗺️ Mapa Interactivo**
         - Visualización geográfica de secciones
-        - Capas intercambiables (Padrón, Lista Nominal, Muestra)
-        - Tooltips con información detallada
+        - Capas intercambiables
+        - Estado de captura por color
         
         **📊 Análisis de Cobertura**
         - Gráficas de distribución de muestra
         - Cobertura por municipio
         - Validación de asignación de encuestas
         
+        **📱 Validación de Contactos** ⭐ NUEVO
+        - Calidad de emails y celulares
+        - Tasas de verificación por sección
+        - Directorio confiable
+        
+        **👥 Control de Calidad** ⭐ NUEVO
+        - Desempeño de encuestadores
+        - Métricas de productividad
+        - Alertas de bajo rendimiento
+        
         **💾 Datos y Descarga**
-        - Tabla completa de secciones muestreadas
+        - Tabla completa de secciones
         - Exportación a CSV
-        - Filtros adicionales
         """)
     
-    st.subheader("💡 Consejos de uso")
-    st.info("""
-    - **Para explorar un área específica:** Usa los filtros de Distrito y Municipio
-    - **Para revisar el plan de campo:** Activa "Solo secciones muestreadas" y ve a la pestaña "Datos y Descarga"
-    - **Para validar cobertura:** Revisa las gráficas en "Análisis de Cobertura"
-    - **En el mapa:** Usa el control de capas (esquina superior derecha) para cambiar entre vistas
-    """)
-    
     st.subheader("📊 Parámetros del Estudio")
-    param_col1, param_col2, param_col3 = st.columns(3)
+    param_col1, param_col2, param_col3, param_col4 = st.columns(4)
     param_col1.metric("Secciones totales", df['SECCIÓN'].nunique())
     param_col2.metric("Secciones en muestra", df_sample['SECCIÓN'].nunique())
     param_col3.metric("Total de encuestas", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
+    param_col4.metric("Progreso general", f"{progreso_captura:.1f}%")
     
     st.markdown("**Nivel de confianza:** 95% | **Margen de error:** ±1.55%")
 
-# ==================== TAB 2: RESUMEN EJECUTIVO ====================
+# ==================== TAB 2: RESUMEN EJECUTIVO (ACTUALIZADO) ====================
 with tab2:
     st.header("📈 Métricas Principales")
     
-    # Métricas superiores
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Secciones en Guerrero", df['SECCIÓN'].nunique())
-    col2.metric("Secciones Mapeadas", int(merged_gdf['geometry'].notna().sum()))
-    col3.metric("Secciones en Muestra", len(df_sample))
-    col4.metric("Total Encuestas a Realizar", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
-    
-    col5, col6, col7 = st.columns(3)
-    col5.metric("Secciones Muestreadas", secciones_muestreadas, delta=f"{tasa_muestreo:.1f}% del total")
-    col6.metric("Total Encuestas", int(total_encuestas))
-    col7.metric("Promedio Encuestas/Sección", f"{promedio_encuestas:.1f}")
+    # NUEVAS MÉTRICAS DE PROGRESO
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Secciones en Muestra", len(df_sample))
+    col2.metric("Encuestas Asignadas", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
+    col3.metric("Encuestas Realizadas", int(total_encuestas_realizadas), 
+                delta=f"{progreso_captura:.1f}%")
+    col4.metric("Secciones Completadas", 
+                len(filtered_sample[filtered_sample['STATUS_CAPTURA'] == 'Completada']))
+    col5.metric("En Proceso", 
+                len(filtered_sample[filtered_sample['STATUS_CAPTURA'] == 'En Proceso']))
     
     st.markdown("---")
     
-    # Indicadores de cobertura
-    st.subheader("📊 Indicadores de Cobertura")
+    # NUEVO: Gauges de progreso
+    st.subheader("🎯 Indicadores de Progreso en Tiempo Real")
     
-    col_a, col_b = st.columns(2)
+    col_prog1, col_prog2, col_prog3 = st.columns(3)
     
-    with col_a:
-        # Tasa de muestreo
-        fig_gauge1 = go.Figure(go.Indicator(
+    with col_prog1:
+        fig_prog = go.Figure(go.Indicator(
             mode = "gauge+number+delta",
-            value = tasa_muestreo,
+            value = progreso_captura,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Tasa de Muestreo (% Secciones)"},
-            delta = {'reference': 10},
+            title = {'text': "Progreso de Captura (%)"},
+            delta = {'reference': 100, 'increasing': {'color': "green"}},
             gauge = {
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkblue"},
                 'steps': [
-                    {'range': [0, 5], 'color': "lightgray"},
-                    {'range': [5, 15], 'color': "gray"}],
+                    {'range': [0, 50], 'color': "lightgray"},
+                    {'range': [50, 80], 'color': "gray"},
+                    {'range': [80, 100], 'color': "lightgreen"}],
                 'threshold': {
                     'line': {'color': "red", 'width': 4},
                     'thickness': 0.75,
-                    'value': 10}}))
-        fig_gauge1.update_layout(height=300)
-        st.plotly_chart(fig_gauge1, use_container_width=True)
+                    'value': 90}}))
+        fig_prog.update_layout(height=250)
+        st.plotly_chart(fig_prog, use_container_width=True)
     
-    with col_b:
-        # Cobertura poblacional
-        fig_gauge2 = go.Figure(go.Indicator(
+    with col_prog2:
+        # Tasa de muestreo
+        fig_gauge1 = go.Figure(go.Indicator(
             mode = "gauge+number",
-            value = cobertura_poblacional,
+            value = tasa_muestreo,
             domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Cobertura Poblacional (% Lista Nominal)"},
+            title = {'text': "Cobertura Geográfica (% Secciones)"},
             gauge = {
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkgreen"},
                 'steps': [
                     {'range': [0, 5], 'color': "lightgray"},
                     {'range': [5, 15], 'color': "gray"}]}))
-        fig_gauge2.update_layout(height=300)
-        st.plotly_chart(fig_gauge2, use_container_width=True)
+        fig_gauge1.update_layout(height=250)
+        st.plotly_chart(fig_gauge1, use_container_width=True)
+    
+    with col_prog3:
+        # Calidad promedio de datos
+        calidad_promedio = filtered_sample['CALIDAD_DATOS'].mean()
+        fig_calidad = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = calidad_promedio,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "Calidad de Datos (Score)"},
+            gauge = {
+                'axis': {'range': [0, 100]},
+                'bar': {'color': "purple"},
+                'steps': [
+                    {'range': [0, 60], 'color': "lightcoral"},
+                    {'range': [60, 80], 'color': "lightyellow"},
+                    {'range': [80, 100], 'color': "lightgreen"}]}))
+        fig_calidad.update_layout(height=250)
+        st.plotly_chart(fig_calidad, use_container_width=True)
     
     st.markdown("---")
     
-    # Distribución por distrito
-    st.subheader("📍 Distribución de la Muestra por Distrito")
-    sample_distrito = df_sample.groupby('Distrito').agg({
+    # Distribución por estado de captura
+    st.subheader("📊 Estado de Captura por Distrito")
+    
+    status_by_distrito = filtered_sample.groupby(['Distrito', 'STATUS_CAPTURA']).size().reset_index(name='count')
+    
+    fig_status = px.bar(
+        status_by_distrito,
+        x='Distrito',
+        y='count',
+        color='STATUS_CAPTURA',
+        title="Distribución de Secciones por Estado de Captura",
+        color_discrete_map={
+            'Completada': 'green',
+            'En Proceso': 'orange',
+            'Pendiente': 'red'
+        },
+        barmode='stack'
+    )
+    st.plotly_chart(fig_status, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Distribución por distrito (original)
+    st.subheader("🔍 Distribución de la Muestra por Distrito")
+    sample_distrito = filtered_sample.groupby('Distrito').agg({
         'SECCIÓN': 'count',
-        'ENCUESTAS_ASIGNADAS': 'sum'
+        'ENCUESTAS_ASIGNADAS': 'sum',
+        'ENCUESTAS_REALIZADAS': 'sum'
     }).reset_index()
-    sample_distrito.columns = ['Distrito', 'Secciones', 'Encuestas']
+    sample_distrito.columns = ['Distrito', 'Secciones', 'Encuestas Asignadas', 'Encuestas Realizadas']
     
     col_dist1, col_dist2 = st.columns(2)
     
@@ -263,177 +428,118 @@ with tab2:
         fig_encuestas = px.bar(
             sample_distrito,
             x='Distrito',
-            y='Encuestas',
-            title="Encuestas Asignadas por Distrito",
-            color='Encuestas',
-            color_continuous_scale='Greens'
+            y=['Encuestas Asignadas', 'Encuestas Realizadas'],
+            title="Encuestas: Asignadas vs Realizadas",
+            barmode='group'
         )
-        fig_encuestas.update_layout(showlegend=False)
         st.plotly_chart(fig_encuestas, use_container_width=True)
 
-# AGREGA ESTE CÓDIGO JUSTO ANTES DEL TAB 3 (después de la línea del st.tabs)
-# Esto es para diagnosticar el problema
-
-# Después de crear los tabs, agrega esto:
-with st.expander("🔍 DEBUG - Ver información de datos (temporal)"):
-    st.write("### Información de filtered_gdf:")
-    st.write(f"- Total filas: {len(filtered_gdf)}")
-    st.write(f"- Tiene geometría: {filtered_gdf['geometry'].notna().sum()}")
-    st.write(f"- CRS del GeoDataFrame: {filtered_gdf.crs if hasattr(filtered_gdf, 'crs') else 'No tiene CRS'}")
-    
-    if not filtered_gdf.empty:
-        st.write(f"- Columnas: {list(filtered_gdf.columns)}")
-        st.write(f"- Primeras 3 filas:")
-        st.dataframe(filtered_gdf[['SECCIÓN', 'MUNICIPIOS', 'Distrito', 'geometry']].head(3))
-        
-        # Verificar geometrías
-        geom_sample = filtered_gdf[filtered_gdf['geometry'].notna()].head(1)
-        if not geom_sample.empty:
-            st.write(f"- Ejemplo de geometría: {geom_sample.iloc[0]['geometry']}")
-            st.write(f"- Tipo de geometría: {geom_sample.iloc[0]['geometry'].geom_type}")
-            
-            # Verificar bounds
-            try:
-                bounds = filtered_gdf[filtered_gdf['geometry'].notna()].total_bounds
-                st.write(f"- Bounds [minx, miny, maxx, maxy]: {bounds}")
-                st.write(f"- Centro calculado: lat={(bounds[1] + bounds[3]) / 2}, lon={(bounds[0] + bounds[2]) / 2}")
-            except Exception as e:
-                st.error(f"Error al calcular bounds: {e}")
-    
-    st.write("### Información de merged_gdf completo:")
-    st.write(f"- Total filas: {len(merged_gdf)}")
-    st.write(f"- Tiene geometría: {merged_gdf['geometry'].notna().sum()}")
-    st.write(f"- Es GeoDataFrame: {isinstance(merged_gdf, gpd.GeoDataFrame)}")
-    
-    st.write("### Información del shapefile original:")
-    st.write(f"- Total filas en gdf original: {len(gpd.read_file(shp_path))}")
-    st.write(f"- CRS original: {gpd.read_file(shp_path).crs}")
-
-
-# ==================== TAB 3: MAPA INTERACTIVO (VERSIÓN CORREGIDA) ====================
+# ==================== TAB 3: MAPA INTERACTIVO ====================
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
     
-    # Opciones de visualización del mapa
     col_map1, col_map2 = st.columns([3, 1])
     with col_map2:
         st.markdown("**Controles:**")
         st.markdown("- Usa el control de capas en el mapa")
         st.markdown("- Haz clic en las secciones para ver detalles")
-        st.markdown("- Zoom con scroll o botones")
+        st.markdown("- Colores indican estado de captura")
     
-    # Preparar datos para el mapa según filtros
     map_data = filtered_gdf[filtered_gdf['geometry'].notna()].copy()
     
-    # Si el checkbox está activado, filtrar solo secciones muestreadas
     if show_sampled:
         map_data = map_data[map_data['is_sampled']]
     
-    # Verificar que hay datos para mostrar
     if map_data.empty:
         st.warning("⚠️ No hay datos geográficos disponibles para los filtros seleccionados.")
-        st.info("💡 Intenta cambiar los filtros o desactivar 'Mostrar solo secciones en muestra'")
     else:
         try:
-            # Calcular el centro del mapa basado en los datos filtrados
-            bounds = map_data.total_bounds  # [minx, miny, maxx, maxy]
+            bounds = map_data.total_bounds
             center_lat = (bounds[1] + bounds[3]) / 2
             center_lon = (bounds[0] + bounds[2]) / 2
             
-            # Crear mapa centrado en los datos filtrados
             m = folium.Map(
                 location=[center_lat, center_lon], 
                 zoom_start=9, 
                 tiles="CartoDB positron"
             )
             
-            # Capa para TOTAL PADRÓN
+            # Capa base con todos los polígonos
             folium.Choropleth(
                 geo_data=map_data,
-                name="🔵 Total Padrón",
-                data=map_data,
-                columns=['SECCIÓN', 'TOTAL PADRÓN'],
-                key_on='feature.properties.SECCIÓN',
-                fill_color='YlOrRd',
-                fill_opacity=0.6,
-                line_opacity=0.3,
-                legend_name='Total Padrón',
-                show=True
-            ).add_to(m)
-            
-            # Capa para TOTAL LISTA NOMINAL
-            folium.Choropleth(
-                geo_data=map_data,
-                name="🟢 Total Lista Nominal",
+                name="📊 Total Lista Nominal",
                 data=map_data,
                 columns=['SECCIÓN', 'TOTAL LISTA NOMINAL'],
                 key_on='feature.properties.SECCIÓN',
                 fill_color='BuGn',
-                fill_opacity=0.6,
-                line_opacity=0.3,
+                fill_opacity=0.4,
+                line_opacity=0.2,
                 legend_name='Total Lista Nominal',
-                show=False
+                show=True
             ).add_to(m)
             
-            # Capa para secciones muestreadas con tooltip enriquecido
+            # NUEVO: Capas por estado de captura
             sampled_sections = map_data[map_data['is_sampled']].copy()
             
             if not sampled_sections.empty:
-                # Agregar información de encuestas
+                # Merge con datos de encuestas
                 sampled_sections = sampled_sections.merge(
-                    df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], 
+                    df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'STATUS_CAPTURA', 'ENCUESTADOR']], 
                     on='SECCIÓN', 
-                    how='left'
+                    how='left',
+                    suffixes=('', '_sample')
                 )
+                
+                # Función de estilo según estado
+                def style_function(feature):
+                    status = feature['properties'].get('STATUS_CAPTURA', 'Pendiente')
+                    color_map = {
+                        'Completada': '#28a745',
+                        'En Proceso': '#ffc107',
+                        'Pendiente': '#dc3545'
+                    }
+                    return {
+                        'fillColor': color_map.get(status, '#6c757d'),
+                        'fillOpacity': 0.7,
+                        'color': 'black',
+                        'weight': 2
+                    }
                 
                 folium.GeoJson(
                     sampled_sections,
-                    name="🎯 Secciones Muestreadas",
-                    style_function=lambda x: {
-                        'fillColor': '#ff4444', 
-                        'fillOpacity': 0.7, 
-                        'color': 'darkred', 
-                        'weight': 2
-                    },
+                    name="🎯 Estado de Captura",
+                    style_function=style_function,
                     tooltip=folium.GeoJsonTooltip(
-                        fields=['SECCIÓN', 'MUNICIPIOS', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS'],
-                        aliases=['Sección', 'Municipio', 'Total Padrón', 'Total Lista Nominal', 'Encuestas Asignadas'],
+                        fields=['SECCIÓN', 'MUNICIPIOS', 'STATUS_CAPTURA', 'ENCUESTADOR', 'ENCUESTAS_ASIGNADAS'],
+                        aliases=['Sección', 'Municipio', 'Estado', 'Encuestador', 'Encuestas Asignadas'],
                         localize=True
                     ),
                     show=True
                 ).add_to(m)
             
-            # Agregar control de capas
             folium.LayerControl().add_to(m)
             
-            # Ajustar el mapa a los límites de los datos
-            sw = [bounds[1], bounds[0]]  # [min_lat, min_lon]
-            ne = [bounds[3], bounds[2]]  # [max_lat, max_lon]
+            sw = [bounds[1], bounds[0]]
+            ne = [bounds[3], bounds[2]]
             m.fit_bounds([sw, ne])
             
-            # Renderizar el mapa
             st_folium(m, width=1400, height=700, returned_objects=[])
             
-            # Mostrar estadísticas del área visible
+            # Estadísticas del área visible
             st.markdown("---")
             col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
             col_stat1.metric("Secciones visibles", len(map_data))
-            col_stat2.metric("Secciones muestreadas visibles", len(sampled_sections) if not sampled_sections.empty else 0)
-            col_stat3.metric("Población (Lista Nominal)", f"{map_data['TOTAL LISTA NOMINAL'].sum():,.0f}")
-            if not sampled_sections.empty:
-                col_stat4.metric("Encuestas en área visible", int(sampled_sections['ENCUESTAS_ASIGNADAS'].sum()))
-            else:
-                col_stat4.metric("Encuestas en área visible", 0)
+            col_stat2.metric("Completadas", len(sampled_sections[sampled_sections['STATUS_CAPTURA'] == 'Completada']) if not sampled_sections.empty else 0)
+            col_stat3.metric("En Proceso", len(sampled_sections[sampled_sections['STATUS_CAPTURA'] == 'En Proceso']) if not sampled_sections.empty else 0)
+            col_stat4.metric("Pendientes", len(sampled_sections[sampled_sections['STATUS_CAPTURA'] == 'Pendiente']) if not sampled_sections.empty else 0)
                 
         except Exception as e:
             st.error(f"❌ Error al crear el mapa: {str(e)}")
-            st.code(f"Detalles técnicos:\n{str(e)}")
-            
+
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
     st.header("📊 Análisis de Cobertura de Muestra")
     
-    # Gráfica 1: Cobertura de muestra por municipio
     st.subheader("Cobertura de Secciones por Municipio")
     
     munic_stats = filtered_gdf.groupby('MUNICIPIOS').agg({
@@ -477,12 +583,12 @@ with tab4:
     
     st.markdown("---")
     
-    # Gráfica 2: Dispersión de asignación de encuestas
     st.subheader("Validación de Asignación de Encuestas")
-    st.markdown("Esta gráfica permite verificar si la asignación de encuestas es proporcional al tamaño de cada sección.")
     
     scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
-        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
+        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS']], 
+        on='SECCIÓN', 
+        how='left'
     )
     
     fig_scatter = px.scatter(
@@ -490,6 +596,7 @@ with tab4:
         x='TOTAL LISTA NOMINAL',
         y='ENCUESTAS_ASIGNADAS',
         color='Distrito',
+        size='ENCUESTAS_REALIZADAS',
         hover_data=['SECCIÓN', 'MUNICIPIOS'],
         title="Relación entre Tamaño de Sección y Encuestas Asignadas",
         labels={
@@ -497,12 +604,11 @@ with tab4:
             'ENCUESTAS_ASIGNADAS': 'Número de Encuestas Asignadas'
         }
     )
-    fig_scatter.update_traces(marker=dict(size=10, opacity=0.7))
+    fig_scatter.update_traces(marker=dict(opacity=0.7))
     st.plotly_chart(fig_scatter, use_container_width=True)
     
     st.markdown("---")
     
-    # Gráfica 3: Intensidad de encuestas
     st.subheader("Intensidad de Encuestamiento")
     st.markdown("Encuestas por cada 1,000 habitantes en la lista nominal")
     
@@ -519,23 +625,269 @@ with tab4:
     fig_intensidad.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_intensidad, use_container_width=True)
 
-# ==================== TAB 5: DATOS Y DESCARGA ====================
+# ==================== TAB 5: VALIDACIÓN DE CONTACTOS (NUEVO) ====================
 with tab5:
+    st.header("📱 Validación de Contactos")
+    st.markdown("**Fase 4:** Verificación de calidad de emails y celulares para crear directorio confiable")
+    
+    # Métricas generales
+    col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+    
+    total_contactos = filtered_sample['ENCUESTAS_REALIZADAS'].sum()
+    emails_validos_total = filtered_sample['EMAILS_VALIDOS'].sum()
+    celulares_validos_total = filtered_sample['CELULARES_VALIDOS'].sum()
+    
+    col_v1.metric("Contactos Totales", int(total_contactos))
+    col_v2.metric("Emails Válidos", int(emails_validos_total), 
+                  delta=f"{(emails_validos_total/total_contactos*100):.1f}%" if total_contactos > 0 else "0%")
+    col_v3.metric("Celulares Válidos", int(celulares_validos_total),
+                  delta=f"{(celulares_validos_total/total_contactos*100):.1f}%" if total_contactos > 0 else "0%")
+    col_v4.metric("Tasa Validación", 
+                  f"{filtered_sample['PCT_EMAIL_VALIDO'].mean():.1f}%")
+    
+    st.markdown("---")
+    
+    # Gráficas de validación
+    st.subheader("📊 Análisis de Calidad de Contactos")
+    
+    col_chart1, col_chart2 = st.columns(2)
+    
+    with col_chart1:
+        # Distribución de calidad de emails
+        fig_email = px.histogram(
+            filtered_sample,
+            x='PCT_EMAIL_VALIDO',
+            nbins=20,
+            title="Distribución de Calidad de Emails por Sección",
+            labels={'PCT_EMAIL_VALIDO': '% Emails Válidos', 'count': 'Número de Secciones'},
+            color_discrete_sequence=['#1f77b4']
+        )
+        fig_email.add_vline(x=filtered_sample['PCT_EMAIL_VALIDO'].mean(), 
+                           line_dash="dash", line_color="red",
+                           annotation_text="Promedio")
+        st.plotly_chart(fig_email, use_container_width=True)
+    
+    with col_chart2:
+        # Distribución de calidad de celulares
+        fig_cel = px.histogram(
+            filtered_sample,
+            x='PCT_CELULAR_VALIDO',
+            nbins=20,
+            title="Distribución de Calidad de Celulares por Sección",
+            labels={'PCT_CELULAR_VALIDO': '% Celulares Válidos', 'count': 'Número de Secciones'},
+            color_discrete_sequence=['#2ca02c']
+        )
+        fig_cel.add_vline(x=filtered_sample['PCT_CELULAR_VALIDO'].mean(), 
+                         line_dash="dash", line_color="red",
+                         annotation_text="Promedio")
+        st.plotly_chart(fig_cel, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Tabla de secciones con baja calidad
+    st.subheader("⚠️ Secciones con Baja Calidad de Contactos")
+    st.markdown("Secciones que requieren revisión (< 80% validación)")
+    
+    low_quality = filtered_sample[
+        (filtered_sample['PCT_EMAIL_VALIDO'] < 80) | 
+        (filtered_sample['PCT_CELULAR_VALIDO'] < 80)
+    ][['SECCIÓN', 'MUNICIPIOS', 'ENCUESTADOR', 'PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO', 'STATUS_CAPTURA']].sort_values('PCT_EMAIL_VALIDO')
+    
+    if len(low_quality) > 0:
+        st.dataframe(
+            low_quality.style.background_gradient(subset=['PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO'], cmap='RdYlGn'),
+            use_container_width=True,
+            height=300
+        )
+        st.warning(f"⚠️ {len(low_quality)} secciones requieren atención especial")
+    else:
+        st.success("✅ Todas las secciones tienen calidad de contactos aceptable")
+    
+    st.markdown("---")
+    
+    # Comparación por distrito
+    st.subheader("📍 Calidad de Contactos por Distrito")
+    
+    distrito_validation = filtered_sample.groupby('Distrito').agg({
+        'PCT_EMAIL_VALIDO': 'mean',
+        'PCT_CELULAR_VALIDO': 'mean',
+        'EMAILS_VALIDOS': 'sum',
+        'CELULARES_VALIDOS': 'sum'
+    }).reset_index()
+    
+    fig_distrito_val = go.Figure()
+    fig_distrito_val.add_trace(go.Bar(
+        x=distrito_validation['Distrito'],
+        y=distrito_validation['PCT_EMAIL_VALIDO'],
+        name='% Email Válido',
+        marker_color='#1f77b4'
+    ))
+    fig_distrito_val.add_trace(go.Bar(
+        x=distrito_validation['Distrito'],
+        y=distrito_validation['PCT_CELULAR_VALIDO'],
+        name='% Celular Válido',
+        marker_color='#2ca02c'
+    ))
+    fig_distrito_val.update_layout(
+        title="Promedio de Validación por Distrito",
+        barmode='group',
+        yaxis_title="Porcentaje de Validación (%)"
+    )
+    st.plotly_chart(fig_distrito_val, use_container_width=True)
+
+# ==================== TAB 6: CONTROL DE CALIDAD (NUEVO) ====================
+with tab6:
+    st.header("👥 Control de Calidad - Auditoría de Encuestadores")
+    st.markdown("**Fase 5:** Análisis de desempeño y calidad de datos por encuestador")
+    
+    # Métricas generales del equipo
+    col_eq1, col_eq2, col_eq3, col_eq4 = st.columns(4)
+    
+    num_encuestadores = filtered_sample['ENCUESTADOR'].nunique()
+    encuestas_por_encuestador = filtered_sample.groupby('ENCUESTADOR')['ENCUESTAS_REALIZADAS'].sum().mean()
+    calidad_promedio = filtered_sample['CALIDAD_DATOS'].mean()
+    tiempo_promedio = filtered_sample['TIEMPO_PROMEDIO_MIN'].mean()
+    
+    col_eq1.metric("Encuestadores Activos", num_encuestadores)
+    col_eq2.metric("Encuestas/Encuestador", f"{encuestas_por_encuestador:.0f}")
+    col_eq3.metric("Calidad Promedio", f"{calidad_promedio:.1f}/100")
+    col_eq4.metric("Tiempo Promedio", f"{tiempo_promedio:.1f} min")
+    
+    st.markdown("---")
+    
+    # Ranking de encuestadores
+    st.subheader("🏆 Ranking de Encuestadores")
+    
+    encuestador_stats = filtered_sample.groupby('ENCUESTADOR').agg({
+        'SECCIÓN': 'count',
+        'ENCUESTAS_REALIZADAS': 'sum',
+        'CALIDAD_DATOS': 'mean',
+        'TIEMPO_PROMEDIO_MIN': 'mean',
+        'PCT_EMAIL_VALIDO': 'mean',
+        'PCT_CELULAR_VALIDO': 'mean'
+    }).reset_index()
+    
+    encuestador_stats.columns = [
+        'Encuestador', 'Secciones Asignadas', 'Encuestas Realizadas', 
+        'Calidad Promedio', 'Tiempo Promedio (min)', 
+        '% Email Válido', '% Celular Válido'
+    ]
+    
+    # Calcular score compuesto
+    encuestador_stats['Score Global'] = (
+        encuestador_stats['Calidad Promedio'] * 0.4 +
+        encuestador_stats['% Email Válido'] * 0.3 +
+        encuestador_stats['% Celular Válido'] * 0.3
+    ).round(1)
+    
+    encuestador_stats = encuestador_stats.sort_values('Score Global', ascending=False)
+    
+    # Visualización del ranking
+    fig_ranking = px.bar(
+        encuestador_stats,
+        x='Encuestador',
+        y='Score Global',
+        color='Score Global',
+        title="Score de Desempeño por Encuestador",
+        color_continuous_scale='RdYlGn',
+        text='Score Global'
+    )
+    fig_ranking.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+    fig_ranking.update_layout(showlegend=False, xaxis_tickangle=-45)
+    st.plotly_chart(fig_ranking, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Tabla detallada
+    st.subheader("📋 Detalle de Desempeño por Encuestador")
+    
+    # Aplicar formato condicional
+    st.dataframe(
+        encuestador_stats.style.background_gradient(
+            subset=['Score Global', 'Calidad Promedio'], 
+            cmap='RdYlGn'
+        ).format({
+            'Calidad Promedio': '{:.1f}',
+            'Tiempo Promedio (min)': '{:.1f}',
+            '% Email Válido': '{:.1f}%',
+            '% Celular Válido': '{:.1f}%',
+            'Score Global': '{:.1f}'
+        }),
+        use_container_width=True,
+        height=400
+    )
+    
+    st.markdown("---")
+    
+    # Análisis de productividad vs calidad
+    st.subheader("⚖️ Balance Productividad vs Calidad")
+    
+    fig_balance = px.scatter(
+        encuestador_stats,
+        x='Encuestas Realizadas',
+        y='Calidad Promedio',
+        size='Score Global',
+        color='Encuestador',
+        title="Relación entre Productividad y Calidad",
+        labels={
+            'Encuestas Realizadas': 'Productividad (Encuestas Realizadas)',
+            'Calidad Promedio': 'Calidad de Datos (Score)'
+        },
+        hover_data=['Secciones Asignadas', 'Tiempo Promedio (min)']
+    )
+    fig_balance.update_traces(marker=dict(size=encuestador_stats['Score Global']*0.5, opacity=0.7))
+    st.plotly_chart(fig_balance, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Alertas de bajo desempeño
+    st.subheader("🚨 Alertas de Desempeño")
+    
+    col_alert1, col_alert2 = st.columns(2)
+    
+    with col_alert1:
+        bajo_score = encuestador_stats[encuestador_stats['Score Global'] < 75]
+        if len(bajo_score) > 0:
+            st.warning(f"⚠️ {len(bajo_score)} encuestadores con score bajo (<75)")
+            st.dataframe(bajo_score[['Encuestador', 'Score Global', 'Calidad Promedio']], 
+                        use_container_width=True)
+        else:
+            st.success("✅ Todos los encuestadores con desempeño aceptable")
+    
+    with col_alert2:
+        tiempo_alto = encuestador_stats[encuestador_stats['Tiempo Promedio (min)'] > 20]
+        if len(tiempo_alto) > 0:
+            st.info(f"ℹ️ {len(tiempo_alto)} encuestadores con tiempo alto (>20 min)")
+            st.dataframe(tiempo_alto[['Encuestador', 'Tiempo Promedio (min)', 'Encuestas Realizadas']], 
+                        use_container_width=True)
+        else:
+            st.success("✅ Tiempos de encuesta dentro del rango óptimo")
+
+# ==================== TAB 7: DATOS Y DESCARGA ====================
+with tab7:
     st.header("💾 Tabla de Secciones Muestreadas")
     
-    # Preparar tabla
-    sample_display = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])][
-        ['SECCIÓN', 'MUNICIPIOS', 'Distrito', 'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL']
-    ].merge(
-        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS']], on='SECCIÓN', how='left'
-    ).sort_values(['Distrito', 'MUNICIPIOS', 'SECCIÓN'])
+    # Preparar tabla completa con todos los datos
+    sample_display = filtered_sample[[
+        'SECCIÓN', 'MUNICIPIOS', 'Distrito', 
+        'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL',
+        'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS',
+        'STATUS_CAPTURA', 'ENCUESTADOR',
+        'PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO',
+        'CALIDAD_DATOS', 'ULTIMA_ACTUALIZACION'
+    ]].copy()
+    
+    sample_display['ULTIMA_ACTUALIZACION'] = sample_display['ULTIMA_ACTUALIZACION'].dt.strftime('%Y-%m-%d')
     
     # Opciones de visualización
     col_table1, col_table2, col_table3 = st.columns(3)
     with col_table1:
         search_seccion = st.text_input("🔍 Buscar Sección", "")
     with col_table2:
-        sort_by = st.selectbox("Ordenar por", ['SECCIÓN', 'MUNICIPIOS', 'Distrito', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS'])
+        sort_by = st.selectbox("Ordenar por", [
+            'SECCIÓN', 'MUNICIPIOS', 'Distrito', 
+            'ENCUESTAS_REALIZADAS', 'CALIDAD_DATOS', 'STATUS_CAPTURA'
+        ])
     with col_table3:
         sort_order = st.radio("Orden", ['Ascendente', 'Descendente'], horizontal=True)
     
@@ -546,14 +898,23 @@ with tab5:
     # Aplicar ordenamiento
     sample_display = sample_display.sort_values(sort_by, ascending=(sort_order == 'Ascendente'))
     
-    # Mostrar tabla
-    st.dataframe(sample_display, use_container_width=True, height=500)
+    # Mostrar tabla con formato
+    st.dataframe(
+        sample_display.style.format({
+            'PCT_EMAIL_VALIDO': '{:.1f}%',
+            'PCT_CELULAR_VALIDO': '{:.1f}%',
+            'CALIDAD_DATOS': '{:.1f}'
+        }).background_gradient(subset=['CALIDAD_DATOS'], cmap='RdYlGn'),
+        use_container_width=True, 
+        height=500
+    )
     
     # Estadísticas de la tabla
-    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
     col_stats1.metric("Registros mostrados", len(sample_display))
     col_stats2.metric("Total Lista Nominal", f"{sample_display['TOTAL LISTA NOMINAL'].sum():,}")
-    col_stats3.metric("Total Encuestas", int(sample_display['ENCUESTAS_ASIGNADAS'].sum()))
+    col_stats3.metric("Encuestas Realizadas", int(sample_display['ENCUESTAS_REALIZADAS'].sum()))
+    col_stats4.metric("Calidad Promedio", f"{sample_display['CALIDAD_DATOS'].mean():.1f}")
     
     # Botón de descarga
     st.markdown("---")
@@ -562,15 +923,48 @@ with tab5:
     st.download_button(
         label="⬇️ Descargar tabla completa como CSV",
         data=csv_buffer.getvalue(),
-        file_name=f"secciones_muestreadas_{selected_distrito}_{selected_municipio}.csv",
+        file_name=f"secciones_detalle_{selected_distrito}_{selected_municipio}.csv",
         mime="text/csv",
         use_container_width=True
     )
+    
+    # Botón de descarga de reporte de encuestadores
+    st.markdown("### 📊 Reportes Adicionales")
+    col_dl1, col_dl2 = st.columns(2)
+    
+    with col_dl1:
+        encuestador_buffer = io.StringIO()
+        encuestador_stats.to_csv(encuestador_buffer, index=False)
+        st.download_button(
+            label="⬇️ Descargar Reporte de Encuestadores",
+            data=encuestador_buffer.getvalue(),
+            file_name=f"reporte_encuestadores_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    with col_dl2:
+        contactos_buffer = io.StringIO()
+        contactos_export = filtered_sample[['SECCIÓN', 'EMAILS_VALIDOS', 'CELULARES_VALIDOS', 'PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO']]
+        contactos_export.to_csv(contactos_buffer, index=False)
+        st.download_button(
+            label="⬇️ Descargar Reporte de Contactos",
+            data=contactos_buffer.getvalue(),
+            file_name=f"reporte_contactos_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
-# Footer con información de secciones no mapeadas
+# Footer con información técnica
 st.markdown("---")
-unmatched = set(df['SECCIÓN'].astype(str)) - set(merged_gdf['SECCIÓN'])
-unmatched_sample = set(df_sample['SECCIÓN'].astype(str)) - set(merged_gdf['SECCIÓN'])
-if unmatched or unmatched_sample:
-    with st.expander("ℹ️ Información técnica"):
-        st.caption(f"Nota: {len(unmatched)} secciones del CSV principal y {len(unmatched_sample)} de la muestra no se pudieron mapear al shapefile.")
+col_footer1, col_footer2, col_footer3 = st.columns(3)
+
+with col_footer1:
+    st.caption(f"📅 Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+
+with col_footer2:
+    unmatched = set(df['SECCIÓN'].astype(str)) - set(merged_gdf['SECCIÓN'])
+    st.caption(f"ℹ️ {len(unmatched)} secciones sin información geográfica")
+
+with col_footer3:
+    st.caption("🔒 Dashboard con datos simulados para demostración")
