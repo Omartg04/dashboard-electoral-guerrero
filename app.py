@@ -195,41 +195,73 @@ with tab1:
     # NUEVO: Timeline del proyecto
     st.subheader("🎯 Flujo del Proyecto Electoral")
     
-    timeline_fig = go.Figure()
-    
+    # Crear visualización más clara del timeline
     fases = [
-        {"fase": "1. Diseño de Muestra", "status": "✅", "color": "green"},
-        {"fase": "2. Captura en Campo", "status": "🔄", "color": "orange"},
-        {"fase": "3. Base de Datos", "status": "🔄", "color": "orange"},
-        {"fase": "4. Validación Contactos", "status": "🔄", "color": "orange"},
-        {"fase": "5. Auditoría Calidad", "status": "⏳", "color": "gray"},
-        {"fase": "6. Perfilamiento", "status": "⏳", "color": "gray"}
+        {"fase": "Diseño de Muestra", "num": "1", "status": "Completado", "color": "#28a745", "icon": "✅"},
+        {"fase": "Captura en Campo", "num": "2", "status": "En Progreso", "color": "#ffc107", "icon": "🔄"},
+        {"fase": "Base de Datos", "num": "3", "status": "En Progreso", "color": "#ffc107", "icon": "🔄"},
+        {"fase": "Validación Contactos", "num": "4", "status": "En Progreso", "color": "#ffc107", "icon": "🔄"},
+        {"fase": "Auditoría Calidad", "num": "5", "status": "Pendiente", "color": "#6c757d", "icon": "⏳"},
+        {"fase": "Perfilamiento", "num": "6", "status": "Pendiente", "color": "#6c757d", "icon": "⏳"}
     ]
     
+    # Crear gráfica de timeline más visual
+    timeline_fig = go.Figure()
+    
+    # Agregar línea conectora
+    timeline_fig.add_trace(go.Scatter(
+        x=list(range(len(fases))),
+        y=[0.5] * len(fases),
+        mode='lines',
+        line=dict(color='lightgray', width=3),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+    
+    # Agregar puntos de cada fase
     for i, fase_info in enumerate(fases):
         timeline_fig.add_trace(go.Scatter(
-            x=[i], y=[0],
+            x=[i], y=[0.5],
             mode='markers+text',
-            marker=dict(size=30, color=fase_info['color']),
-            text=fase_info['status'],
+            marker=dict(size=40, color=fase_info['color'], line=dict(width=2, color='white')),
+            text=fase_info['num'],
             textposition="middle center",
-            textfont=dict(size=14, color='white'),
-            name=fase_info['fase'],
-            hovertemplate=f"<b>{fase_info['fase']}</b><br>Estado: {fase_info['status']}<extra></extra>"
+            textfont=dict(size=16, color='white', family='Arial Black'),
+            name=f"{fase_info['icon']} {fase_info['num']}. {fase_info['fase']}",
+            hovertemplate=f"<b>Fase {fase_info['num']}: {fase_info['fase']}</b><br>" +
+                         f"Estado: {fase_info['status']}<br>" +
+                         f"{fase_info['icon']}<extra></extra>",
+            showlegend=True
         ))
     
     timeline_fig.update_layout(
         showlegend=True,
-        height=200,
-        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
-        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=11)
+        ),
+        height=250,
+        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False, range=[-0.5, len(fases)-0.5]),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False, range=[0, 1]),
         plot_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=0, r=0, t=20, b=0)
+        margin=dict(l=20, r=200, t=20, b=20),
+        hovermode='closest'
     )
     
     st.plotly_chart(timeline_fig, use_container_width=True)
     
-    st.markdown("**Leyenda:** ✅ Completado | 🔄 En Progreso | ⏳ Pendiente")
+    # Leyenda más clara
+    col_ley1, col_ley2, col_ley3 = st.columns(3)
+    with col_ley1:
+        st.markdown("✅ **Completado:** Fase finalizada")
+    with col_ley2:
+        st.markdown("🔄 **En Progreso:** Actualmente trabajando")
+    with col_ley3:
+        st.markdown("⏳ **Pendiente:** Por iniciar")
     
     st.markdown("---")
     
@@ -249,13 +281,47 @@ with tab1:
         
         st.subheader("🔍 Cómo usar los filtros")
         st.markdown("""
-        **Barra lateral izquierda:**
-        1. **Distrito:** Filtra por distrito electoral
-        2. **Municipio:** Filtra por municipio específico
-        3. **Estado de Captura:** Filtra por progreso (Completada/En Proceso/Pendiente)
-        4. **☑️ Solo secciones muestreadas:** Muestra únicamente las 400 secciones seleccionadas
+        **Barra lateral izquierda (Filtros):**
         
-        Los filtros se aplican automáticamente a todas las pestañas.
+        1. **📍 Distrito:** Selecciona un distrito específico o "Todos" para ver todo el estado
+           - *Ejemplo:* Si seleccionas "Distrito 1", solo verás datos de ese distrito
+           
+        2. **🏘️ Municipio:** Filtra por municipio específico
+           - *Nota:* Los municipios disponibles cambian según el distrito seleccionado
+           - Si Distrito = "Todos", verás todos los municipios
+           
+        3. **📊 Estado de Captura:** Filtra las secciones según su progreso
+           - ✅ **Completada:** Secciones donde se terminó el trabajo de campo
+           - 🔄 **En Proceso:** Secciones con encuestas parciales
+           - ⏳ **Pendiente:** Secciones aún no iniciadas
+           - *Puedes seleccionar múltiples estados*
+        
+        4. **☑️ Mostrar solo secciones en muestra:** 
+           - Activado: Muestra únicamente las 400 secciones seleccionadas para encuestar
+           - Desactivado: Muestra todas las secciones del estado
+        
+        **⚡ Los filtros se aplican automáticamente** a todas las pestañas del dashboard.
+        """)
+        
+        # Ejemplo visual de cómo funcionan los filtros
+        with st.expander("💡 Ver ejemplo de uso de filtros"):
+            st.markdown("""
+            **Caso de uso 1:** *"Quiero ver el progreso solo del Distrito 5"*
+            - Selecciona: Distrito = "5"
+            - Municipio = "Todos"
+            - Estado = [Todos seleccionados]
+            
+            **Caso de uso 2:** *"Quiero ver qué secciones están pendientes en Acapulco"*
+            - Distrito = "Todos" o el correspondiente
+            - Municipio = "Acapulco de Juárez"
+            - Estado = Solo "Pendiente" ✓
+            
+            **Caso de uso 3:** *"Ver todas las secciones completadas de la muestra"*
+            - Distrito = "Todos"
+            - Municipio = "Todos"  
+            - Estado = Solo "Completada" ✓
+            - ✓ Activar "Mostrar solo secciones en muestra"
+            """)
         """)
     
     with col_inst2:
