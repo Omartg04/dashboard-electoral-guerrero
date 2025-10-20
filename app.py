@@ -703,7 +703,7 @@ with tab5:
     
     if len(low_quality) > 0:
         st.dataframe(
-            low_quality.style.background_gradient(subset=['PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO'], cmap='RdYlGn'),
+            low_quality,
             use_container_width=True,
             height=300
         )
@@ -906,13 +906,9 @@ with tab7:
     # Aplicar ordenamiento
     sample_display = sample_display.sort_values(sort_by, ascending=(sort_order == 'Ascendente'))
     
-    # Mostrar tabla con formato
+    # Mostrar tabla simple sin estilos que requieran matplotlib
     st.dataframe(
-        sample_display.style.format({
-            'PCT_EMAIL_VALIDO': '{:.1f}%',
-            'PCT_CELULAR_VALIDO': '{:.1f}%',
-            'CALIDAD_DATOS': '{:.1f}'
-        }).background_gradient(subset=['CALIDAD_DATOS'], cmap='RdYlGn'),
+        sample_display,
         use_container_width=True, 
         height=500
     )
