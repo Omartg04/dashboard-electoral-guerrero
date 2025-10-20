@@ -585,11 +585,19 @@ with tab4:
     
     st.subheader("Validación de Asignación de Encuestas")
     
-    scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].merge(
+    # Merge correcto evitando duplicados de columnas
+    scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].copy()
+    scatter_data = scatter_data.merge(
         df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS']], 
         on='SECCIÓN', 
-        how='left'
+        how='left',
+        suffixes=('', '_sample')
     )
+    
+    # Si hay columnas duplicadas, usar las del sample
+    if 'ENCUESTAS_ASIGNADAS_sample' in scatter_data.columns:
+        scatter_data['ENCUESTAS_ASIGNADAS'] = scatter_data['ENCUESTAS_ASIGNADAS_sample']
+        scatter_data['ENCUESTAS_REALIZADAS'] = scatter_data['ENCUESTAS_REALIZADAS_sample']
     
     fig_scatter = px.scatter(
         scatter_data,
@@ -597,7 +605,7 @@ with tab4:
         y='ENCUESTAS_ASIGNADAS',
         color='Distrito',
         size='ENCUESTAS_REALIZADAS',
-        hover_data=['SECCIÓN', 'MUNICIPIOS'],
+        hover_data=['SECCIÓN', 'MUNICIPIOS', 'ENCUESTAS_REALIZADAS'],
         title="Relación entre Tamaño de Sección y Encuestas Asignadas",
         labels={
             'TOTAL LISTA NOMINAL': 'Total Lista Nominal (Tamaño de Sección)',
