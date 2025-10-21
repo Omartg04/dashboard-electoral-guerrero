@@ -753,7 +753,7 @@ with tab5:
     # Métricas generales
     col_v1, col_v2, col_v3, col_v4 = st.columns(4)
     
-    total_contactos = filtered_sample['ENCUESTAS_REALIZADAS_MUESTRAL'].sum()
+    total_contactos = filtered_sample['ENCUESTAS_REALIZADAS'].sum()
     emails_validos_total = filtered_sample['EMAILS_VALIDOS'].sum()
     celulares_validos_total = filtered_sample['CELULARES_VALIDOS'].sum()
     
