@@ -54,60 +54,82 @@ def load_data():
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     
-    # ===== DATOS SIMULADOS PARA MOCKUP =====
+# ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
-    
-    # 1. PROGRESO DE CAPTURA (Fase 2-3)
-    n_secciones = len(df_sample)
-    estados_captura = np.random.choice(
+
+    # Simulación para global en df (todas las 765 secciones)
+    n_secciones_totales = len(df)
+    encuestas_por_seccion_global = 20000 // n_secciones_totales  # ~26 encuestas por sección
+    resto_global = 20000 % n_secciones_totales
+    df['ENCUESTAS_ASIGNADAS_GLOBAL'] = encuestas_por_seccion_global
+    df.iloc[:resto_global, df.columns.get_loc('ENCUESTAS_ASIGNADAS_GLOBAL')] += 1
+
+    estados_captura_global = np.random.choice(
         ['Completada', 'En Proceso', 'Pendiente'], 
-        size=n_secciones,
-        p=[0.60, 0.25, 0.15]  # 60% completado, 25% en proceso, 15% pendiente
+        size=n_secciones_totales,
+        p=[0.60, 0.25, 0.15]
     )
-    df_sample['STATUS_CAPTURA'] = estados_captura
-    
-    # Encuestas realizadas (menor o igual a las asignadas)
-    df_sample['ENCUESTAS_REALIZADAS'] = df_sample.apply(
-        lambda x: x['ENCUESTAS_ASIGNADAS'] if x['STATUS_CAPTURA'] == 'Completada' 
-        else int(x['ENCUESTAS_ASIGNADAS'] * np.random.uniform(0.3, 0.9)) if x['STATUS_CAPTURA'] == 'En Proceso'
+    df['STATUS_CAPTURA_GLOBAL'] = estados_captura_global
+
+    df['ENCUESTAS_REALIZADAS_GLOBAL'] = df.apply(
+        lambda x: x['ENCUESTAS_ASIGNADAS_GLOBAL'] if x['STATUS_CAPTURA_GLOBAL'] == 'Completada' 
+        else int(x['ENCUESTAS_ASIGNADAS_GLOBAL'] * np.random.uniform(0.3, 0.9)) if x['STATUS_CAPTURA_GLOBAL'] == 'En Proceso' 
         else 0,
         axis=1
     )
-    
-    # Fecha de última actualización (últimos 7 días)
+
+    # Simulación para muestral en df_sample (400 secciones)
+    n_secciones = len(df_sample)
+    df_sample['ENCUESTAS_ASIGNADAS_MUESTRAL'] = 10  # 10 encuestas por sección, sumando 4,000
+
+    estados_captura = np.random.choice(
+        ['Completada', 'En Proceso', 'Pendiente'], 
+        size=n_secciones,
+        p=[0.60, 0.25, 0.15]
+    )
+    df_sample['STATUS_CAPTURA'] = estados_captura
+
+    df_sample['ENCUESTAS_REALIZADAS_MUESTRAL'] = df_sample.apply(
+        lambda x: x['ENCUESTAS_ASIGNADAS_MUESTRAL'] if x['STATUS_CAPTURA'] == 'Completada' 
+        else int(x['ENCUESTAS_ASIGNADAS_MUESTRAL'] * np.random.uniform(0.3, 0.9)) if x['STATUS_CAPTURA'] == 'En Proceso' 
+        else 0,
+        axis=1
+    )
+
+    # Fecha de última actualización
     fecha_base = datetime.now()
     df_sample['ULTIMA_ACTUALIZACION'] = [
         fecha_base - timedelta(days=np.random.randint(0, 8)) for _ in range(n_secciones)
     ]
-    
-    # 2. VALIDACIÓN DE CONTACTOS (Fase 4)
-    # Porcentaje de emails válidos
+
+    # Validación de contactos
     df_sample['PCT_EMAIL_VALIDO'] = np.random.uniform(70, 95, n_secciones).round(1)
     df_sample['PCT_CELULAR_VALIDO'] = np.random.uniform(75, 98, n_secciones).round(1)
-    
-    # Números absolutos
-    df_sample['EMAILS_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS'] * df_sample['PCT_EMAIL_VALIDO'] / 100).astype(int)
-    df_sample['CELULARES_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS'] * df_sample['PCT_CELULAR_VALIDO'] / 100).astype(int)
-    
-    # 3. ENCUESTADORES (Fase 5)
+    df_sample['EMAILS_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS_MUESTRAL'] * df_sample['PCT_EMAIL_VALIDO'] / 100).astype(int)
+    df_sample['CELULARES_VALIDOS'] = (df_sample['ENCUESTAS_REALIZADAS_MUESTRAL'] * df_sample['PCT_CELULAR_VALIDO'] / 100).astype(int)
+
+    # Encuestadores
     encuestadores = ['Juan Pérez', 'María González', 'Carlos Ramírez', 'Ana López', 
                      'Luis Martínez', 'Sofia Torres', 'Diego Hernández', 'Laura Sánchez']
     df_sample['ENCUESTADOR'] = np.random.choice(encuestadores, n_secciones)
-    
-    # Calidad del encuestador (score 0-100)
+
+    # Calidad y tiempo
     df_sample['CALIDAD_DATOS'] = np.random.uniform(60, 100, n_secciones).round(1)
-    
-    # Tiempo promedio por encuesta (minutos)
     df_sample['TIEMPO_PROMEDIO_MIN'] = np.random.uniform(8, 25, n_secciones).round(1)
-    
-    # Actualizar merged_gdf con información de progreso
+
+    # Merge global y muestral en merged_gdf
     merged_gdf = merged_gdf.merge(
-        df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_REALIZADAS', 'ENCUESTADOR']], 
+        df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
         how='left'
     )
-    
-    return df, merged_gdf, df_sample
+    merged_gdf = merged_gdf.merge(
+        df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL', 'ENCUESTADOR']], 
+        on='SECCIÓN', 
+        how='left'
+    )
+
+    return df, df_sample, merged_gdf
 
 # Cargar los datos usando la función
 try:
