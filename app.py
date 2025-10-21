@@ -157,6 +157,8 @@ if selected_municipio != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['MUNICIPIOS'] == selected_municipio]
 if status_filter:
     filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
+else:
+    pass
 
 # Calcular métricas
 total_secciones = filtered_gdf['SECCIÓN'].nunique()
@@ -531,7 +533,7 @@ with tab3:
                 tiles="CartoDB positron"
             )
             
-            # Capa base con todos los polígonos
+            # Capa base con todos los polígonos (sin filtro de estado, para contexto)
             folium.Choropleth(
                 geo_data=map_data,
                 name="📊 Total Lista Nominal",
@@ -557,32 +559,38 @@ with tab3:
                     suffixes=('', '_sample')
                 )
                 
-                # Función de estilo según estado
-                def style_function(feature):
-                    status = feature['properties'].get('STATUS_CAPTURA', 'Pendiente')
-                    color_map = {
-                        'Completada': '#28a745',
-                        'En Proceso': '#ffc107',
-                        'Pendiente': '#dc3545'
-                    }
-                    return {
-                        'fillColor': color_map.get(status, '#6c757d'),
-                        'fillOpacity': 0.7,
-                        'color': 'black',
-                        'weight': 2
-                    }
+                # CAMBIO: Aplicar filtro de estado aquí
+                if status_filter:
+                    sampled_sections = sampled_sections[sampled_sections['STATUS_CAPTURA'].isin(status_filter)]
                 
-                folium.GeoJson(
-                    sampled_sections,
-                    name="🎯 Estado de Captura",
-                    style_function=style_function,
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=['SECCIÓN', 'MUNICIPIOS', 'STATUS_CAPTURA', 'ENCUESTADOR', 'ENCUESTAS_ASIGNADAS'],
-                        aliases=['Sección', 'Municipio', 'Estado', 'Encuestador', 'Encuestas Asignadas'],
-                        localize=True
-                    ),
-                    show=True
-                ).add_to(m)
+                # Si después del filtro no hay datos, no agregar la capa
+                if not sampled_sections.empty:
+                    # Función de estilo según estado
+                    def style_function(feature):
+                        status = feature['properties'].get('STATUS_CAPTURA', 'Pendiente')
+                        color_map = {
+                            'Completada': '#28a745',
+                            'En Proceso': '#ffc107',
+                            'Pendiente': '#dc3545'
+                        }
+                        return {
+                            'fillColor': color_map.get(status, '#6c757d'),
+                            'fillOpacity': 0.7,
+                            'color': 'black',
+                            'weight': 2
+                        }
+                    
+                    folium.GeoJson(
+                        sampled_sections,
+                        name="🎯 Estado de Captura",
+                        style_function=style_function,
+                        tooltip=folium.GeoJsonTooltip(
+                            fields=['SECCIÓN', 'MUNICIPIOS', 'STATUS_CAPTURA', 'ENCUESTADOR', 'ENCUESTAS_ASIGNADAS'],
+                            aliases=['Sección', 'Municipio', 'Estado', 'Encuestador', 'Encuestas Asignadas'],
+                            localize=True
+                        ),
+                        show=True
+                    ).add_to(m)
             
             folium.LayerControl().add_to(m)
             
@@ -592,7 +600,7 @@ with tab3:
             
             st_folium(m, width=1400, height=700, returned_objects=[])
             
-            # Estadísticas del área visible
+            # CAMBIO: Estadísticas del área visible, ahora usando sampled_sections filtrado
             st.markdown("---")
             col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
             col_stat1.metric("Secciones visibles", len(map_data))
