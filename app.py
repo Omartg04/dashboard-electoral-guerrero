@@ -200,14 +200,6 @@ except Exception as e:
     st.error(f"Error en load_data: {str(e)}")
     st.stop()
 
-# Debugging: Mostrar columnas después de load_data
-st.write("Columnas en df:", df.columns.tolist())
-st.write("Columnas en df_sample:", df_sample.columns.tolist())
-st.write("Columnas en merged_gdf:", merged_gdf.columns.tolist())
-st.write("SECCIÓN matches (df vs merged_gdf):", len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN']))), "/", len(merged_gdf))
-st.write(f"Número de secciones en merged_gdf: {len(merged_gdf)} (debería ser ~760)")
-st.write(f"Número de secciones en df_sample: {len(df_sample)} (debería ser 400)")
-
 # Definir filtros
 distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
 municipios_unicos = ['Todos'] + sorted(df['MUNICIPIOS'].unique())
