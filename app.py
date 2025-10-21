@@ -184,12 +184,7 @@ def load_data():
 
     return df, df_sample, merged_gdf_temp
 
-# Cargar los datos usando la función
-try:
-    df, merged_gdf, df_sample = load_data()
-except FileNotFoundError as e:
-    st.error(f"Error al cargar archivos: {e}. Asegúrate de que los archivos estén en la carpeta 'data'.")
-    st.stop()
+
 
 # --- Sidebar de Filtros ---
 st.sidebar.header("Filtros de Visualización")
