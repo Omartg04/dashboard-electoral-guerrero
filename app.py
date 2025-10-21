@@ -172,13 +172,13 @@ def load_data():
     merged_gdf_temp = merged_gdf_temp.merge(
         df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
-        how='inner',  # Asegurar solo secciones coincidentes
+        how='inner',
         validate='1:1'
     )
     merged_gdf_temp = merged_gdf_temp.merge(
         df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL', 'ENCUESTADOR']], 
         on='SECCIÓN', 
-        how='left',   # Muestral puede tener menos secciones (400)
+        how='left',
         validate='1:1'
     )
 
@@ -257,14 +257,14 @@ avance_muestral = (total_encuestas_realizadas_muestral / 4000 * 100) if 4000 > 0
 total_encuestas_realizadas_global = filtered_gdf['ENCUESTAS_REALIZADAS_GLOBAL'].sum()
 avance_global = (total_encuestas_realizadas_global / 20000 * 100) if 20000 > 0 else 0
 
-# Mantener compatibilidad con el resto del código
-total_encuestas_realizadas = total_encuestas_realizadas_muestral
+# Corregir variable para compatibilidad con el resto del código
+total_encuestas_realizadas = total_encuestas_realizadas_muestral  # Usar ENCUESTAS_REALIZADAS_MUESTRAL
 progreso_captura = progreso_captura_muestral
 tasa_muestreo = (len(df_sample) / len(df) * 100) if len(df) > 0 else 0
 
 # NUEVAS MÉTRICAS DE PROGRESO
-total_encuestas_asignadas = filtered_sample['ENCUESTAS_ASIGNADAS'].sum()
-total_encuestas_realizadas = filtered_sample['ENCUESTAS_REALIZADAS'].sum()
+total_encuestas_asignadas = filtered_sample['ENCUESTAS_ASIGNADAS_MUESTRAL'].sum()
+total_encuestas_realizadas = filtered_sample['ENCUESTAS_REALIZADAS_MUESTRAL'].sum()
 progreso_captura = (total_encuestas_realizadas / total_encuestas_asignadas * 100) if total_encuestas_asignadas > 0 else 0
 
 # Título principal
