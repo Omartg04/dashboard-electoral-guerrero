@@ -141,15 +141,14 @@ status_filter = st.sidebar.multiselect(
 
 show_sampled = st.sidebar.checkbox("Mostrar solo secciones en muestra en el mapa")
 
-# --- Aplicar filtros a los datos ---
-# Mantener filtered_gdf SIN filtro de estado para conservar contexto geográfico
+# ===== FILTROS =====
+# Aplicar filtros a los datos
 filtered_gdf = merged_gdf.copy()
 if selected_distrito != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
 if selected_municipio != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['MUNICIPIOS'] == selected_municipio]
 
-# Filtrar df_sample con TODOS los filtros incluyendo estado
 filtered_sample = df_sample.copy()
 if selected_distrito != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['Distrito'] == selected_distrito]
@@ -157,16 +156,20 @@ if selected_municipio != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['MUNICIPIOS'] == selected_municipio]
 if status_filter:
     filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
-else:
-    pass
 
-# Calcular métricas
-total_secciones = filtered_gdf['SECCIÓN'].nunique()
-secciones_muestreadas = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['SECCIÓN'].nunique()
-tasa_muestreo = (secciones_muestreadas / total_secciones * 100) if total_secciones > 0 else 0
-total_lista = filtered_gdf['TOTAL LISTA NOMINAL'].sum()
-lista_muestra = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['TOTAL LISTA NOMINAL'].sum()
-cobertura_poblacional = (lista_muestra / total_lista * 100) if total_lista > 0 else 0
+# Calcular métricas globales y muestrales
+total_encuestas_asignadas_muestral = filtered_sample['ENCUESTAS_ASIGNADAS_MUESTRAL'].sum()
+total_encuestas_realizadas_muestral = filtered_sample['ENCUESTAS_REALIZADAS_MUESTRAL'].sum()
+progreso_captura_muestral = (total_encuestas_realizadas_muestral / total_encuestas_asignadas_muestral * 100) if total_encuestas_asignadas_muestral > 0 else 0
+avance_muestral = (total_encuestas_realizadas_muestral / 4000 * 100) if 4000 > 0 else 0
+
+total_encuestas_realizadas_global = filtered_gdf['ENCUESTAS_REALIZADAS_GLOBAL'].sum()
+avance_global = (total_encuestas_realizadas_global / 20000 * 100) if 20000 > 0 else 0
+
+# Mantener compatibilidad con el resto del código
+total_encuestas_realizadas = total_encuestas_realizadas_muestral
+progreso_captura = progreso_captura_muestral
+tasa_muestreo = (len(df_sample) / len(df) * 100) if len(df) > 0 else 0
 
 # NUEVAS MÉTRICAS DE PROGRESO
 total_encuestas_asignadas = filtered_sample['ENCUESTAS_ASIGNADAS'].sum()
@@ -369,38 +372,35 @@ with tab1:
     
     st.markdown("**Nivel de confianza:** 95% | **Margen de error:** ±1.55%")
 
-# ==================== TAB 2: RESUMEN EJECUTIVO (ACTUALIZADO) ====================
+# ===== TAB 2: RESUMEN EJECUTIVO =====
 with tab2:
     st.header("📈 Métricas Principales")
     
-    # NUEVAS MÉTRICAS DE PROGRESO
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Secciones Totales", 765)  # Total de secciones fijas
-    col2.metric("Secciones en Muestra", len(df_sample))
-    col3.metric("Encuestas Asignadas", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
-    col4.metric("Encuestas Realizadas", int(total_encuestas_realizadas), 
-                delta=f"{progreso_captura:.1f}%")
-    # Nueva métrica: Meta de encuestas y avance (corregido a 20,000 totales)
-    total_encuestas_meta = 20000  # Meta total de 20,000 encuestas
-    avance_meta = (total_encuestas_realizadas / total_encuestas_meta * 100) if total_encuestas_meta > 0 else 0
-    col5.metric("Avance hacia Meta", f"{int(total_encuestas_realizadas):,}", 
-                delta=f"{avance_meta:.1f}% de 20,000")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1.metric("Secciones Totales", 765)
+    col2.metric("Encuestas Realizadas Global", int(total_encuestas_realizadas_global), 
+                delta=f"{avance_global:.1f}% de 20,000")
+    col3.metric("Secciones en Muestra", len(filtered_sample))
+    col4.metric("Encuestas Asignadas Muestral", int(total_encuestas_asignadas_muestral))
+    col5.metric("Encuestas Realizadas Muestral", int(total_encuestas_realizadas_muestral), 
+                delta=f"{progreso_captura_muestral:.1f}%")
+    col6.metric("Avance Muestral", f"{int(total_encuestas_realizadas_muestral):,}", 
+                delta=f"{avance_muestral:.1f}% de 4,000")
     
     st.markdown("---")
     
-    # Resto del código de Tab 2 (gauges, gráficos, etc.) permanece igual
     st.subheader("🎯 Indicadores de Progreso en Tiempo Real")
     
     col_prog1, col_prog2, col_prog3 = st.columns(3)
     
     with col_prog1:
         fig_prog = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = progreso_captura,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Progreso de Captura (%)"},
-            delta = {'reference': 100, 'increasing': {'color': "green"}},
-            gauge = {
+            mode="gauge+number+delta",
+            value=progreso_captura_muestral,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Progreso de Captura Muestral (%)"},
+            delta={'reference': 100, 'increasing': {'color': "green"}},
+            gauge={
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkblue"},
                 'steps': [
@@ -415,13 +415,12 @@ with tab2:
         st.plotly_chart(fig_prog, use_container_width=True)
     
     with col_prog2:
-        # Tasa de muestreo
         fig_gauge1 = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = tasa_muestreo,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Cobertura Geográfica (% Secciones)"},
-            gauge = {
+            mode="gauge+number",
+            value=tasa_muestreo,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Cobertura Geográfica (% Secciones)"},
+            gauge={
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "darkgreen"},
                 'steps': [
@@ -431,14 +430,13 @@ with tab2:
         st.plotly_chart(fig_gauge1, use_container_width=True)
     
     with col_prog3:
-        # Calidad promedio de datos
         calidad_promedio = filtered_sample['CALIDAD_DATOS'].mean()
         fig_calidad = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = calidad_promedio,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Calidad de Datos (Score)"},
-            gauge = {
+            mode="gauge+number",
+            value=calidad_promedio,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Calidad de Datos (Score)"},
+            gauge={
                 'axis': {'range': [0, 100]},
                 'bar': {'color': "purple"},
                 'steps': [
@@ -450,7 +448,6 @@ with tab2:
     
     st.markdown("---")
     
-    # Distribución por estado de captura
     st.subheader("📊 Estado de Captura por Distrito")
     
     status_by_distrito = filtered_sample.groupby(['Distrito', 'STATUS_CAPTURA']).size().reset_index(name='count')
@@ -472,14 +469,13 @@ with tab2:
     
     st.markdown("---")
     
-    # Distribución por distrito (original)
     st.subheader("🔍 Distribución de la Muestra por Distrito")
     sample_distrito = filtered_sample.groupby('Distrito').agg({
         'SECCIÓN': 'count',
-        'ENCUESTAS_ASIGNADAS': 'sum',
-        'ENCUESTAS_REALIZADAS': 'sum'
+        'ENCUESTAS_ASIGNADAS_MUESTRAL': 'sum',
+        'ENCUESTAS_REALIZADAS_MUESTRAL': 'sum'
     }).reset_index()
-    sample_distrito.columns = ['Distrito', 'Secciones', 'Encuestas Asignadas', 'Encuestas Realizadas']
+    sample_distrito.columns = ['Distrito', 'Secciones', 'Encuestas Asignadas Muestral', 'Encuestas Realizadas Muestral']
     
     col_dist1, col_dist2 = st.columns(2)
     
@@ -499,11 +495,12 @@ with tab2:
         fig_encuestas = px.bar(
             sample_distrito,
             x='Distrito',
-            y=['Encuestas Asignadas', 'Encuestas Realizadas'],
-            title="Encuestas: Asignadas vs Realizadas",
+            y=['Encuestas Asignadas Muestral', 'Encuestas Realizadas Muestral'],
+            title="Encuestas Muestral: Asignadas vs Realizadas",
             barmode='group'
         )
         st.plotly_chart(fig_encuestas, use_container_width=True)
+
 # ==================== TAB 3: MAPA INTERACTIVO ====================
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
