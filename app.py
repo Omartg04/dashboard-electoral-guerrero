@@ -375,18 +375,20 @@ with tab2:
     
     # NUEVAS MÉTRICAS DE PROGRESO
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Secciones en Muestra", len(df_sample))
-    col2.metric("Encuestas Asignadas", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
-    col3.metric("Encuestas Realizadas", int(total_encuestas_realizadas), 
+    col1.metric("Secciones Totales", 765)  # Total de secciones fijas
+    col2.metric("Secciones en Muestra", len(df_sample))
+    col3.metric("Encuestas Asignadas", int(df_sample['ENCUESTAS_ASIGNADAS'].sum()))
+    col4.metric("Encuestas Realizadas", int(total_encuestas_realizadas), 
                 delta=f"{progreso_captura:.1f}%")
-    col4.metric("Secciones Completadas", 
-                len(filtered_sample[filtered_sample['STATUS_CAPTURA'] == 'Completada']))
-    col5.metric("En Proceso", 
-                len(filtered_sample[filtered_sample['STATUS_CAPTURA'] == 'En Proceso']))
+    # Nueva métrica: Meta de encuestas y avance (corregido a 20,000 totales)
+    total_encuestas_meta = 20000  # Meta total de 20,000 encuestas
+    avance_meta = (total_encuestas_realizadas / total_encuestas_meta * 100) if total_encuestas_meta > 0 else 0
+    col5.metric("Avance hacia Meta", f"{int(total_encuestas_realizadas):,}", 
+                delta=f"{avance_meta:.1f}% de 20,000")
     
     st.markdown("---")
     
-    # NUEVO: Gauges de progreso
+    # Resto del código de Tab 2 (gauges, gráficos, etc.) permanece igual
     st.subheader("🎯 Indicadores de Progreso en Tiempo Real")
     
     col_prog1, col_prog2, col_prog3 = st.columns(3)
@@ -502,7 +504,6 @@ with tab2:
             barmode='group'
         )
         st.plotly_chart(fig_encuestas, use_container_width=True)
-
 # ==================== TAB 3: MAPA INTERACTIVO ====================
 with tab3:
     st.header("🗺️ Mapa de Secciones Electorales")
