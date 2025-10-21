@@ -47,21 +47,29 @@ def load_data():
     df.drop_duplicates(subset=['SECCIÓN'], keep='first', inplace=True)
     
     # Asegurar tipos consistentes
-    df['SECCIÓN'] = df['SECCIÓN'].astype(str).str.strip()
-    gdf['SECCIÓN'] = gdf.get('SECCIÓN', gdf.get('SECCION', pd.Series())).astype(str).str.strip()
-    df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str).str.strip()
+    df['SECCIÓN'] = df['SECCIÓN'].astype(str).str.strip().str.upper()
+    gdf['SECCIÓN'] = gdf.get('SECCIÓN', gdf.get('SECCION', pd.Series())).astype(str).str.strip().str.upper()
+    df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str).str.strip().str.upper()
     
+    # Filtrar gdf para incluir solo las secciones presentes en df (limita a ~760 secciones)
+    gdf = gdf[gdf['SECCIÓN'].isin(df['SECCIÓN'])].copy()
+    
+    # Verificar que gdf no esté vacío después del filtro
+    if gdf.empty:
+        st.error("Error: No hay secciones coincidentes entre gdf y df. Revisa los valores de 'SECCIÓN'.")
+        st.stop()
+
     # Reproyectar a EPSG:4326 para Folium
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # Merge CSV con shapefile
-    merged_gdf = gdf.merge(df, left_on='SECCIÓN', right_on='SECCIÓN', how='left')
+    # Merge CSV con shapefile (usar inner para asegurar solo las 760 secciones coincidentes)
+    merged_gdf = gdf.merge(df, left_on='SECCIÓN', right_on='SECCIÓN', how='inner')
     
     # Convertir a GeoDataFrame
     merged_gdf = gpd.GeoDataFrame(merged_gdf, geometry='geometry', crs="EPSG:4326")
     
-    # Crear la columna 'is_sampled'
+    # Crear la columna 'is_sampled' para las 400 secciones muestrales
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)
 
@@ -99,7 +107,7 @@ def load_data():
         st.write("SECCIÓN no coincidentes en merged_gdf:", merged_gdf[~merged_gdf['SECCIÓN'].isin(df['SECCIÓN'])]['SECCIÓN'].tolist())
         raise ValueError(f"Algunas SECCIÓN en merged_gdf no están en df. Matches: {len(set(merged_gdf['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(merged_gdf)}")
 
-    # Simulación para global en df (todas las 765 secciones)
+    # Simulación para global en df (~765 secciones)
     n_secciones_totales = len(df)
     encuestas_por_seccion_global = 20000 // n_secciones_totales  # ~26 encuestas por sección
     resto_global = 20000 % n_secciones_totales
@@ -164,13 +172,13 @@ def load_data():
     merged_gdf_temp = merged_gdf_temp.merge(
         df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
-        how='left',
+        how='inner',  # Asegurar solo secciones coincidentes
         validate='1:1'
     )
     merged_gdf_temp = merged_gdf_temp.merge(
         df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL', 'ENCUESTADOR']], 
         on='SECCIÓN', 
-        how='left',
+        how='left',   # Muestral puede tener menos secciones (400)
         validate='1:1'
     )
 
@@ -197,6 +205,8 @@ st.write("Columnas en df:", df.columns.tolist())
 st.write("Columnas en df_sample:", df_sample.columns.tolist())
 st.write("Columnas en merged_gdf:", merged_gdf.columns.tolist())
 st.write("SECCIÓN matches (df vs merged_gdf):", len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN']))), "/", len(merged_gdf))
+st.write(f"Número de secciones en merged_gdf: {len(merged_gdf)} (debería ser ~760)")
+st.write(f"Número de secciones en df_sample: {len(df_sample)} (debería ser 400)")
 
 # Definir filtros
 distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
@@ -216,6 +226,8 @@ if selected_distrito != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
 if selected_municipio != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['MUNICIPIOS'] == selected_municipio]
+if show_sampled:
+    filtered_gdf = filtered_gdf[filtered_gdf['is_sampled'] == True]
 
 filtered_sample = df_sample.copy()
 if selected_distrito != 'Todos':
