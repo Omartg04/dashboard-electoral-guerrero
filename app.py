@@ -880,7 +880,7 @@ with tab6:
     
     encuestador_stats = filtered_sample.groupby('ENCUESTADOR').agg({
         'SECCIÓN': 'count',
-        'ENCUESTAS_REALIZADAS': 'sum',
+        'ENCUESTAS_REALIZADAS_MUESTRAL': 'sum',
         'CALIDAD_DATOS': 'mean',
         'TIEMPO_PROMEDIO_MIN': 'mean',
         'PCT_EMAIL_VALIDO': 'mean',
@@ -982,7 +982,7 @@ with tab7:
     sample_display = filtered_sample[[
         'SECCIÓN', 'MUNICIPIOS', 'Distrito', 
         'TOTAL PADRÓN', 'TOTAL LISTA NOMINAL',
-        'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS',
+        'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS_MUESTRAL',
         'STATUS_CAPTURA', 'ENCUESTADOR',
         'PCT_EMAIL_VALIDO', 'PCT_CELULAR_VALIDO',
         'CALIDAD_DATOS', 'ULTIMA_ACTUALIZACION'
