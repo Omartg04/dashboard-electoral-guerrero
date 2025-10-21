@@ -1,15 +1,34 @@
+import os
 import pandas as pd
 import geopandas as gpd
-import numpy as np
 import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+import folium
+from streamlit_folium import st_folium
+import io
+import numpy as np
 from datetime import datetime, timedelta
 
-# Definir rutas de archivos
-csv_path = 'data/secciones.csv'  # Ajusta según la ubicación real
-shp_path = 'data/secciones.geojson'  # Ajusta según la ubicación real
-sample_path = 'data/secciones_muestra.csv'  # Ajusta según la ubicación real
+# Configuración de la página
+st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
 
-# Cargar datos usando la función
+# Asegúrate de que estas rutas sean correctas para tu despliegue
+BASE_PATH = "data"
+csv_path = os.path.join(BASE_PATH, "consolidado_seleccion.csv")
+shp_path = os.path.join(BASE_PATH, "SECCION.shp")
+sample_path = os.path.join(BASE_PATH, "plan_de_campo.csv")
+
+# Limpiar cache de Streamlit para evitar datos obsoletos
+st.cache_data.clear()
+
+# Verificar que los archivos existen (para depuración)
+for path in [csv_path, shp_path, sample_path]:
+    if not os.path.exists(path):
+        st.error(f"No se encontró el archivo: {path}")
+        raise FileNotFoundError(f"No se encontró el archivo: {path}")
+
+# Cargar datos
 @st.cache_data
 def load_data():
     # Cargar datos
@@ -29,7 +48,7 @@ def load_data():
     
     # Asegurar tipos consistentes
     df['SECCIÓN'] = df['SECCIÓN'].astype(str).str.strip()
-    gdf['SECCIÓN'] = gdf['SECCIÓN'].astype(str).str.strip()  # Usar SECCIÓN en lugar de SECCION
+    gdf['SECCIÓN'] = gdf.get('SECCIÓN', gdf.get('SECCION', pd.Series())).astype(str).str.strip()
     df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str).str.strip()
     
     # Reproyectar a EPSG:4326 para Folium
@@ -74,6 +93,7 @@ def load_data():
 
     # Verificar que SECCIÓN en df_sample y merged_gdf es subconjunto de df
     if not df_sample['SECCIÓN'].isin(df['SECCIÓN']).all():
+        st.write("SECCIÓN no coincidentes en df_sample:", df_sample[~df_sample['SECCIÓN'].isin(df['SECCIÓN'])]['SECCIÓN'].tolist())
         raise ValueError(f"Algunas SECCIÓN en df_sample no están en df. Matches: {len(set(df_sample['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(df_sample)}")
     if not merged_gdf['SECCIÓN'].isin(df['SECCIÓN']).all():
         st.write("SECCIÓN no coincidentes en merged_gdf:", merged_gdf[~merged_gdf['SECCIÓN'].isin(df['SECCIÓN'])]['SECCIÓN'].tolist())
@@ -172,7 +192,13 @@ except Exception as e:
     st.error(f"Error en load_data: {str(e)}")
     st.stop()
 
-# Definir filtros después de cargar los datos
+# Debugging: Mostrar columnas después de load_data
+st.write("Columnas en df:", df.columns.tolist())
+st.write("Columnas en df_sample:", df_sample.columns.tolist())
+st.write("Columnas en merged_gdf:", merged_gdf.columns.tolist())
+st.write("SECCIÓN matches (df vs merged_gdf):", len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN']))), "/", len(merged_gdf))
+
+# Definir filtros
 distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
 municipios_unicos = ['Todos'] + sorted(df['MUNICIPIOS'].unique())
 status_options = ['Completada', 'En Proceso', 'Pendiente']
