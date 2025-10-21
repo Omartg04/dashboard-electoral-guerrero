@@ -54,15 +54,17 @@ def load_data():
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     
-def load_data():
-    # Simulación de datos base (suponiendo que df y df_sample ya están definidos)
-    # df: 765 secciones, df_sample: 400 secciones muestreadas
-    # Asumimos que df y df_sample tienen SECCIÓN, Distrito, MUNICIPIOS, TOTAL LISTA NOMINAL, etc.
-    
     # ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
 
-    # Debugging: Verificar que df y df_sample están definidos correctamente
+    # Debugging: Verificar que df, df_sample, y merged_gdf son válidos
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("df no es un DataFrame válido. Revisa la inicialización de df.")
+    if not isinstance(df_sample, pd.DataFrame):
+        raise ValueError("df_sample no es un DataFrame válido. Revisa la inicialización de df_sample.")
+    if not isinstance(merged_gdf, gpd.GeoDataFrame):
+        raise ValueError("merged_gdf no es un GeoDataFrame válido. Revisa la inicialización de merged_gdf.")
+
     if 'SECCIÓN' not in df.columns:
         raise ValueError("La columna 'SECCIÓN' no existe en df. Revisa la carga inicial de datos.")
     if 'SECCIÓN' not in df_sample.columns:
@@ -81,6 +83,8 @@ def load_data():
     # Verificar que SECCIÓN en df_sample es subconjunto de df
     if not df_sample['SECCIÓN'].isin(df['SECCIÓN']).all():
         raise ValueError("Algunas SECCIÓN en df_sample no están en df. Revisa la creación de df_sample.")
+    if not merged_gdf['SECCIÓN'].isin(df['SECCIÓN']).all():
+        raise ValueError(f"Algunas SECCIÓN en merged_gdf no están en df. Matches: {len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
 
     # Simulación para global en df (todas las 765 secciones)
     n_secciones_totales = len(df)
@@ -143,7 +147,7 @@ def load_data():
     df_sample['TIEMPO_PROMEDIO_MIN'] = np.random.uniform(8, 25, n_secciones).round(1)
 
     # Merge global y muestral en merged_gdf
-    merged_gdf_temp = merged_gdf.copy()  # Work on a copy to avoid modifying the original
+    merged_gdf_temp = merged_gdf.copy()
     merged_gdf_temp = merged_gdf_temp.merge(
         df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
