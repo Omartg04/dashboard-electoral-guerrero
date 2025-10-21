@@ -25,52 +25,64 @@ for path in [csv_path, shp_path, sample_path]:
         st.error(f"No se encontró el archivo: {path}")
         raise FileNotFoundError(f"No se encontró el archivo: {path}")
 
-# Cargar datos
 @st.cache_data
 def load_data():
-    df = pd.read_csv(csv_path)
-    gdf = gpd.read_file(shp_path)
-    df_sample = pd.read_csv(sample_path)
-    
+    # Cargar datos
+    try:
+        df = pd.read_csv(csv_path)
+        gdf = gpd.read_file(shp_path)
+        df_sample = pd.read_csv(sample_path)
+    except FileNotFoundError as e:
+        st.error(f"Error al cargar archivos: {e}. Asegúrate de que los archivos estén en la carpeta 'data'.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error al cargar datos: {str(e)}")
+        st.stop()
+
     # Asegurar que la base principal no tenga duplicados
     df.drop_duplicates(subset=['SECCIÓN'], keep='first', inplace=True)
     
     # Asegurar tipos consistentes
-    df['SECCIÓN'] = df['SECCIÓN'].astype(str)
-    gdf['SECCION'] = gdf['SECCION'].astype(str)
-    df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str)
+    df['SECCIÓN'] = df['SECCIÓN'].astype(str).str.strip()
+    gdf['SECCION'] = gdf['SECCION'].astype(str).str.strip()
+    df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str).str.strip()
     
     # Reproyectar a EPSG:4326 para Folium
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
-  
-    # Merge CSV con shapefile
+
+    # Merge CSV con shapefile, usando SECCIÓN y SECCION
     merged_gdf = df.merge(gdf, left_on='SECCIÓN', right_on='SECCION', how='left')
     
-    # Convertir de nuevo a GeoDataFrame
+    # Convertir a GeoDataFrame
     merged_gdf = gpd.GeoDataFrame(merged_gdf, geometry='geometry', crs="EPSG:4326")
+    
+    # Renombrar SECCION a SECCIÓN para consistencia
+    if 'SECCIÓN' not in merged_gdf.columns:
+        merged_gdf['SECCIÓN'] = merged_gdf['SECCION']
+    merged_gdf = merged_gdf.drop(columns=['SECCION'], errors='ignore')
     
     # Crear la columna 'is_sampled'
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
-    merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
-    
+    merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)
+
     # ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
 
     # Debugging: Verificar que df, df_sample, y merged_gdf son válidos
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("df no es un DataFrame válido. Revisa la inicialización de df.")
+        raise ValueError("df no es un DataFrame válido.")
     if not isinstance(df_sample, pd.DataFrame):
-        raise ValueError("df_sample no es un DataFrame válido. Revisa la inicialización de df_sample.")
+        raise ValueError("df_sample no es un DataFrame válido.")
     if not isinstance(merged_gdf, gpd.GeoDataFrame):
-        raise ValueError("merged_gdf no es un GeoDataFrame válido. Revisa la inicialización de merged_gdf.")
+        raise ValueError("merged_gdf no es un GeoDataFrame válido.")
 
     if 'SECCIÓN' not in df.columns:
-        raise ValueError("La columna 'SECCIÓN' no existe en df. Revisa la carga inicial de datos.")
+        raise ValueError("La columna 'SECCIÓN' no existe en df.")
     if 'SECCIÓN' not in df_sample.columns:
-        raise ValueError("La columna 'SECCIÓN' no existe en df_sample. Revisa la carga inicial de datos.")
+        raise ValueError("La columna 'SECCIÓN' no existe en df_sample.")
     if 'SECCIÓN' not in merged_gdf.columns:
-        raise ValueError("La columna 'SECCIÓN' no existe en merged_gdf. Revisa la carga inicial de datos.")
+        raise ValueError("La columna 'SECCIÓN' no existe en merged_gdf.")
 
     # Verificar duplicados en SECCIÓN
     if df['SECCIÓN'].duplicated().sum() > 0:
@@ -80,11 +92,11 @@ def load_data():
     if merged_gdf['SECCIÓN'].duplicated().sum() > 0:
         raise ValueError(f"Hay {merged_gdf['SECCIÓN'].duplicated().sum()} valores duplicados en SECCIÓN en merged_gdf.")
 
-    # Verificar que SECCIÓN en df_sample es subconjunto de df
+    # Verificar que SECCIÓN en df_sample y merged_gdf es subconjunto de df
     if not df_sample['SECCIÓN'].isin(df['SECCIÓN']).all():
-        raise ValueError("Algunas SECCIÓN en df_sample no están en df. Revisa la creación de df_sample.")
+        raise ValueError(f"Algunas SECCIÓN en df_sample no están en df. Matches: {len(set(df_sample['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(df_sample)}")
     if not merged_gdf['SECCIÓN'].isin(df['SECCIÓN']).all():
-        raise ValueError(f"Algunas SECCIÓN en merged_gdf no están en df. Matches: {len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
+        raise ValueError(f"Algunas SECCIÓN en merged_gdf no están en df. Matches: {len(set(merged_gdf['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(merged_gdf)}")
 
     # Simulación para global en df (todas las 765 secciones)
     n_secciones_totales = len(df)
@@ -161,8 +173,11 @@ def load_data():
         validate='1:1'
     )
 
-    # Debugging: Check if merge added columns
+    # Debugging: Verificar columnas después del merge
     if 'ENCUESTAS_REALIZADAS_GLOBAL' not in merged_gdf_temp.columns:
+        st.write("Columnas en df:", df.columns.tolist())
+        st.write("Columnas en merged_gdf antes del merge:", merged_gdf.columns.tolist())
+        st.write("SECCIÓN matches (df vs merged_gdf):", len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN']))), "/", len(merged_gdf))
         raise ValueError(f"Failed to add 'ENCUESTAS_REALIZADAS_GLOBAL' to merged_gdf. SECCIÓN matches: {len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
     if 'ENCUESTAS_ASIGNADAS_MUESTRAL' not in merged_gdf_temp.columns:
         raise ValueError(f"Failed to add 'ENCUESTAS_ASIGNADAS_MUESTRAL' to merged_gdf. SECCIÓN matches: {len(set(df_sample['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
