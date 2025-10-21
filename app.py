@@ -752,7 +752,7 @@ with tab4:
     # Merge correcto evitando duplicados de columnas
     scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].copy()
     scatter_data = scatter_data.merge(
-        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS']], 
+        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL']], 
         on='SECCIÓN', 
         how='left',
         suffixes=('', '_sample')
