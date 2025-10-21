@@ -1,30 +1,15 @@
-import os
 import pandas as pd
 import geopandas as gpd
-import streamlit as st
-import plotly.express as px
-import plotly.graph_objects as go
-import folium
-from streamlit_folium import st_folium
-import io
 import numpy as np
+import streamlit as st
 from datetime import datetime, timedelta
 
-# Configuración de la página
-st.set_page_config(page_title="Dashboard Electoral Guerrero", layout="wide", initial_sidebar_state="expanded")
+# Definir rutas de archivos
+csv_path = 'data/secciones.csv'  # Ajusta según la ubicación real
+shp_path = 'data/secciones.geojson'  # Ajusta según la ubicación real
+sample_path = 'data/secciones_muestra.csv'  # Ajusta según la ubicación real
 
-# Asegúrate de que estas rutas sean correctas para tu despliegue
-BASE_PATH = "data"
-csv_path = os.path.join(BASE_PATH, "consolidado_seleccion.csv")
-shp_path = os.path.join(BASE_PATH, "SECCION.shp")
-sample_path = os.path.join(BASE_PATH, "plan_de_campo.csv")
-
-# Verificar que los archivos existen (para depuración)
-for path in [csv_path, shp_path, sample_path]:
-    if not os.path.exists(path):
-        st.error(f"No se encontró el archivo: {path}")
-        raise FileNotFoundError(f"No se encontró el archivo: {path}")
-
+# Cargar datos usando la función
 @st.cache_data
 def load_data():
     # Cargar datos
@@ -44,23 +29,18 @@ def load_data():
     
     # Asegurar tipos consistentes
     df['SECCIÓN'] = df['SECCIÓN'].astype(str).str.strip()
-    gdf['SECCION'] = gdf['SECCION'].astype(str).str.strip()
+    gdf['SECCIÓN'] = gdf['SECCIÓN'].astype(str).str.strip()  # Usar SECCIÓN en lugar de SECCION
     df_sample['SECCIÓN'] = df_sample['SECCIÓN'].astype(str).str.strip()
     
     # Reproyectar a EPSG:4326 para Folium
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs("EPSG:4326")
 
-    # Merge CSV con shapefile, usando SECCIÓN y SECCION
-    merged_gdf = df.merge(gdf, left_on='SECCIÓN', right_on='SECCION', how='left')
+    # Merge CSV con shapefile
+    merged_gdf = gdf.merge(df, left_on='SECCIÓN', right_on='SECCIÓN', how='left')
     
     # Convertir a GeoDataFrame
     merged_gdf = gpd.GeoDataFrame(merged_gdf, geometry='geometry', crs="EPSG:4326")
-    
-    # Renombrar SECCION a SECCIÓN para consistencia
-    if 'SECCIÓN' not in merged_gdf.columns:
-        merged_gdf['SECCIÓN'] = merged_gdf['SECCION']
-    merged_gdf = merged_gdf.drop(columns=['SECCION'], errors='ignore')
     
     # Crear la columna 'is_sampled'
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
@@ -96,6 +76,7 @@ def load_data():
     if not df_sample['SECCIÓN'].isin(df['SECCIÓN']).all():
         raise ValueError(f"Algunas SECCIÓN en df_sample no están en df. Matches: {len(set(df_sample['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(df_sample)}")
     if not merged_gdf['SECCIÓN'].isin(df['SECCIÓN']).all():
+        st.write("SECCIÓN no coincidentes en merged_gdf:", merged_gdf[~merged_gdf['SECCIÓN'].isin(df['SECCIÓN'])]['SECCIÓN'].tolist())
         raise ValueError(f"Algunas SECCIÓN en merged_gdf no están en df. Matches: {len(set(merged_gdf['SECCIÓN']).intersection(set(df['SECCIÓN'])))}/{len(merged_gdf)}")
 
     # Simulación para global en df (todas las 765 secciones)
@@ -184,35 +165,26 @@ def load_data():
 
     return df, df_sample, merged_gdf_temp
 
+# Cargar los datos
+try:
+    df, df_sample, merged_gdf = load_data()
+except Exception as e:
+    st.error(f"Error en load_data: {str(e)}")
+    st.stop()
 
-
-# --- Sidebar de Filtros ---
-st.sidebar.header("Filtros de Visualización")
-
+# Definir filtros después de cargar los datos
 distritos_unicos = ['Todos'] + sorted(df['Distrito'].unique())
-selected_distrito = st.sidebar.selectbox("Filtrar por Distrito", distritos_unicos)
+municipios_unicos = ['Todos'] + sorted(df['MUNICIPIOS'].unique())
+status_options = ['Completada', 'En Proceso', 'Pendiente']
 
-if selected_distrito != 'Todos':
-    municipios_filtrados = sorted(df[df['Distrito'] == selected_distrito]['MUNICIPIOS'].unique())
-else:
-    municipios_filtrados = sorted(df['MUNICIPIOS'].unique())
-    
-municipios_unicos = ['Todos'] + municipios_filtrados
-selected_municipio = st.sidebar.selectbox("Filtrar por Municipio", municipios_unicos)
-
-# NUEVO: Filtro por estado de captura
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Filtros de Progreso")
-status_filter = st.sidebar.multiselect(
-    "Estado de Captura",
-    ['Completada', 'En Proceso', 'Pendiente'],
-    default=['Completada', 'En Proceso', 'Pendiente']
-)
-
-show_sampled = st.sidebar.checkbox("Mostrar solo secciones en muestra en el mapa")
+# Filtros en la barra lateral
+st.sidebar.header("Filtros")
+selected_distrito = st.sidebar.selectbox("Distrito", distritos_unicos)
+selected_municipio = st.sidebar.selectbox("Municipio", municipios_unicos)
+status_filter = st.sidebar.multiselect("Estado de Captura", status_options, default=status_options)
+show_sampled = st.sidebar.checkbox("Mostrar solo secciones muestreadas", value=False)
 
 # ===== FILTROS =====
-# Aplicar filtros a los datos
 filtered_gdf = merged_gdf.copy()
 if selected_distrito != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
