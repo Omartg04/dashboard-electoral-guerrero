@@ -54,7 +54,12 @@ def load_data():
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     
-# ===== DATOS SIMULADOS PARA MOCKUP =====
+def load_data():
+    # Simulación de datos base (suponiendo que df y df_sample ya están definidos)
+    # df: 765 secciones, df_sample: 400 secciones muestreadas
+    # Asumimos que df y df_sample tienen SECCIÓN, Distrito, MUNICIPIOS, TOTAL LISTA NOMINAL, etc.
+    
+    # ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
 
     # Debugging: Verificar que df y df_sample están definidos correctamente
