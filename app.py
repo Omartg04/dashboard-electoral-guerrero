@@ -54,7 +54,7 @@ def load_data():
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     
-# ===== DATOS SIMULADOS PARA MOCKUP =====
+    # ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
 
     # Simulación para global en df (todas las 765 secciones)
@@ -118,16 +118,25 @@ def load_data():
     df_sample['TIEMPO_PROMEDIO_MIN'] = np.random.uniform(8, 25, n_secciones).round(1)
 
     # Merge global y muestral en merged_gdf
+    merged_gdf = merged_gdf.copy()  # Ensure we don't modify the original
     merged_gdf = merged_gdf.merge(
         df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
-        how='left'
+        how='left',
+        validate='1:1'  # Ensure one-to-one merge
     )
     merged_gdf = merged_gdf.merge(
         df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL', 'ENCUESTADOR']], 
         on='SECCIÓN', 
-        how='left'
+        how='left',
+        validate='1:1'
     )
+
+    # Debugging: Check columns in merged_gdf
+    if 'ENCUESTAS_REALIZADAS_GLOBAL' not in merged_gdf.columns:
+        raise ValueError("Failed to add 'ENCUESTAS_REALIZADAS_GLOBAL' to merged_gdf. Check df and merge operation.")
+    if 'ENCUESTAS_ASIGNADAS_MUESTRAL' not in df_sample.columns:
+        raise ValueError("Failed to add 'ENCUESTAS_ASIGNADAS_MUESTRAL' to df_sample. Check simulation.")
 
     return df, df_sample, merged_gdf
 
@@ -178,6 +187,17 @@ if selected_municipio != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['MUNICIPIOS'] == selected_municipio]
 if status_filter:
     filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
+
+# Verificación de columnas para depuración
+if 'ENCUESTAS_ASIGNADAS_MUESTRAL' not in filtered_sample.columns:
+    st.error("Error: La columna 'ENCUESTAS_ASIGNADAS_MUESTRAL' no existe en filtered_sample. Revisa la función load_data.")
+    st.stop()
+if 'ENCUESTAS_REALIZADAS_MUESTRAL' not in filtered_sample.columns:
+    st.error("Error: La columna 'ENCUESTAS_REALIZADAS_MUESTRAL' no existe en filtered_sample. Revisa la función load_data.")
+    st.stop()
+if 'ENCUESTAS_REALIZADAS_GLOBAL' not in filtered_gdf.columns:
+    st.error("Error: La columna 'ENCUESTAS_REALIZADAS_GLOBAL' no existe en filtered_gdf. Revisa la función load_data.")
+    st.stop()
 
 # Calcular métricas globales y muestrales
 total_encuestas_asignadas_muestral = filtered_sample['ENCUESTAS_ASIGNADAS_MUESTRAL'].sum()
