@@ -54,8 +54,28 @@ def load_data():
     secciones_en_muestra_ids = df_sample['SECCIÓN'].unique()
     merged_gdf['is_sampled'] = merged_gdf['SECCIÓN'].isin(secciones_en_muestra_ids)    
     
-    # ===== DATOS SIMULADOS PARA MOCKUP =====
+# ===== DATOS SIMULADOS PARA MOCKUP =====
     np.random.seed(42)
+
+    # Debugging: Verificar que df y df_sample están definidos correctamente
+    if 'SECCIÓN' not in df.columns:
+        raise ValueError("La columna 'SECCIÓN' no existe en df. Revisa la carga inicial de datos.")
+    if 'SECCIÓN' not in df_sample.columns:
+        raise ValueError("La columna 'SECCIÓN' no existe en df_sample. Revisa la carga inicial de datos.")
+    if 'SECCIÓN' not in merged_gdf.columns:
+        raise ValueError("La columna 'SECCIÓN' no existe en merged_gdf. Revisa la carga inicial de datos.")
+
+    # Verificar duplicados en SECCIÓN
+    if df['SECCIÓN'].duplicated().sum() > 0:
+        raise ValueError(f"Hay {df['SECCIÓN'].duplicated().sum()} valores duplicados en SECCIÓN en df.")
+    if df_sample['SECCIÓN'].duplicated().sum() > 0:
+        raise ValueError(f"Hay {df_sample['SECCIÓN'].duplicated().sum()} valores duplicados en SECCIÓN en df_sample.")
+    if merged_gdf['SECCIÓN'].duplicated().sum() > 0:
+        raise ValueError(f"Hay {merged_gdf['SECCIÓN'].duplicated().sum()} valores duplicados en SECCIÓN en merged_gdf.")
+
+    # Verificar que SECCIÓN en df_sample es subconjunto de df
+    if not df_sample['SECCIÓN'].isin(df['SECCIÓN']).all():
+        raise ValueError("Algunas SECCIÓN en df_sample no están en df. Revisa la creación de df_sample.")
 
     # Simulación para global en df (todas las 765 secciones)
     n_secciones_totales = len(df)
@@ -118,27 +138,27 @@ def load_data():
     df_sample['TIEMPO_PROMEDIO_MIN'] = np.random.uniform(8, 25, n_secciones).round(1)
 
     # Merge global y muestral en merged_gdf
-    merged_gdf = merged_gdf.copy()  # Ensure we don't modify the original
-    merged_gdf = merged_gdf.merge(
+    merged_gdf_temp = merged_gdf.copy()  # Work on a copy to avoid modifying the original
+    merged_gdf_temp = merged_gdf_temp.merge(
         df[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_GLOBAL', 'ENCUESTAS_REALIZADAS_GLOBAL', 'STATUS_CAPTURA_GLOBAL']], 
         on='SECCIÓN', 
         how='left',
-        validate='1:1'  # Ensure one-to-one merge
+        validate='1:1'
     )
-    merged_gdf = merged_gdf.merge(
+    merged_gdf_temp = merged_gdf_temp.merge(
         df_sample[['SECCIÓN', 'STATUS_CAPTURA', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL', 'ENCUESTADOR']], 
         on='SECCIÓN', 
         how='left',
         validate='1:1'
     )
 
-    # Debugging: Check columns in merged_gdf
-    if 'ENCUESTAS_REALIZADAS_GLOBAL' not in merged_gdf.columns:
-        raise ValueError("Failed to add 'ENCUESTAS_REALIZADAS_GLOBAL' to merged_gdf. Check df and merge operation.")
-    if 'ENCUESTAS_ASIGNADAS_MUESTRAL' not in df_sample.columns:
-        raise ValueError("Failed to add 'ENCUESTAS_ASIGNADAS_MUESTRAL' to df_sample. Check simulation.")
+    # Debugging: Check if merge added columns
+    if 'ENCUESTAS_REALIZADAS_GLOBAL' not in merged_gdf_temp.columns:
+        raise ValueError(f"Failed to add 'ENCUESTAS_REALIZADAS_GLOBAL' to merged_gdf. SECCIÓN matches: {len(set(df['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
+    if 'ENCUESTAS_ASIGNADAS_MUESTRAL' not in merged_gdf_temp.columns:
+        raise ValueError(f"Failed to add 'ENCUESTAS_ASIGNADAS_MUESTRAL' to merged_gdf. SECCIÓN matches: {len(set(df_sample['SECCIÓN']).intersection(set(merged_gdf['SECCIÓN'])))}/{len(merged_gdf)}")
 
-    return df, df_sample, merged_gdf
+    return df, df_sample, merged_gdf_temp
 
 # Cargar los datos usando la función
 try:
