@@ -142,13 +142,14 @@ status_filter = st.sidebar.multiselect(
 show_sampled = st.sidebar.checkbox("Mostrar solo secciones en muestra en el mapa")
 
 # --- Aplicar filtros a los datos ---
+# Mantener filtered_gdf SIN filtro de estado para conservar contexto geográfico
 filtered_gdf = merged_gdf.copy()
 if selected_distrito != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['Distrito'] == selected_distrito]
 if selected_municipio != 'Todos':
     filtered_gdf = filtered_gdf[filtered_gdf['MUNICIPIOS'] == selected_municipio]
 
-# Filtrar df_sample también
+# Filtrar df_sample con TODOS los filtros incluyendo estado
 filtered_sample = df_sample.copy()
 if selected_distrito != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['Distrito'] == selected_distrito]
@@ -156,12 +157,6 @@ if selected_municipio != 'Todos':
     filtered_sample = filtered_sample[filtered_sample['MUNICIPIOS'] == selected_municipio]
 if status_filter:
     filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
-
-# NUEVO: Aplicar filtro de estado de captura a filtered_gdf también
-if status_filter:
-    # Filtrar el GDF para mostrar solo las secciones con los estados seleccionados
-    secciones_filtradas = filtered_sample['SECCIÓN'].unique()
-    filtered_gdf = filtered_gdf[filtered_gdf['SECCIÓN'].isin(secciones_filtradas)]
 
 # Calcular métricas
 total_secciones = filtered_gdf['SECCIÓN'].nunique()
@@ -328,7 +323,8 @@ with tab1:
             - Estado = Solo "Completada"
             - Activar "Mostrar solo secciones en muestra"
             """)
-            
+        
+    
     with col_inst2:
         st.subheader("🔑 Navegación por pestañas")
         st.markdown("""
