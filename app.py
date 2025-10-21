@@ -749,31 +749,34 @@ with tab4:
     
     st.subheader("Validación de Asignación de Encuestas")
     
-    # Merge correcto evitando duplicados de columnas
+    # Merge correcto incluyendo ENCUESTAS_ASIGNADAS
     scatter_data = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])].copy()
     scatter_data = scatter_data.merge(
-        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL']], 
+        df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_ASIGNADAS_MUESTRAL', 'ENCUESTAS_REALIZADAS_MUESTRAL']], 
         on='SECCIÓN', 
-        how='left',
-        suffixes=('', '_sample')
+        how='left'
     )
     
-    # Si hay columnas duplicadas, usar las del sample
-    if 'ENCUESTAS_ASIGNADAS_sample' in scatter_data.columns:
-        scatter_data['ENCUESTAS_ASIGNADAS'] = scatter_data['ENCUESTAS_ASIGNADAS_sample']
-        scatter_data['ENCUESTAS_REALIZADAS'] = scatter_data['ENCUESTAS_REALIZADAS_sample']
-    
+    # Verificar que las columnas necesarias existan
+    required_columns = ['SECCIÓN', 'Distrito', 'MUNICIPIOS', 'TOTAL LISTA NOMINAL', 'ENCUESTAS_ASIGNADAS', 'ENCUESTAS_REALIZADAS_MUESTRAL']
+    missing_columns = [col for col in required_columns if col not in scatter_data.columns]
+    if missing_columns:
+        st.error(f"Error: Faltan las columnas {missing_columns} en scatter_data.")
+        st.stop()
+
+    # Crear el gráfico de dispersión
     fig_scatter = px.scatter(
         scatter_data,
         x='TOTAL LISTA NOMINAL',
         y='ENCUESTAS_ASIGNADAS',
         color='Distrito',
-        size='ENCUESTAS_REALIZADAS',
-        hover_data=['SECCIÓN', 'MUNICIPIOS', 'ENCUESTAS_REALIZADAS'],
+        size='ENCUESTAS_REALIZADAS_MUESTRAL',
+        hover_data=['SECCIÓN', 'MUNICIPIOS', 'ENCUESTAS_REALIZADAS_MUESTRAL'],
         title="Relación entre Tamaño de Sección y Encuestas Asignadas",
         labels={
             'TOTAL LISTA NOMINAL': 'Total Lista Nominal (Tamaño de Sección)',
-            'ENCUESTAS_ASIGNADAS': 'Número de Encuestas Asignadas'
+            'ENCUESTAS_ASIGNADAS': 'Número de Encuestas Asignadas',
+            'ENCUESTAS_REALIZADAS_MUESTRAL': 'Encuestas Realizadas'
         }
     )
     fig_scatter.update_traces(marker=dict(opacity=0.7))
@@ -796,6 +799,8 @@ with tab4:
     )
     fig_intensidad.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_intensidad, use_container_width=True)
+
+
 
 # ==================== TAB 5: VALIDACIÓN DE CONTACTOS (NUEVO) ====================
 with tab5:
