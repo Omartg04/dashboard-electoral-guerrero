@@ -157,6 +157,12 @@ if selected_municipio != 'Todos':
 if status_filter:
     filtered_sample = filtered_sample[filtered_sample['STATUS_CAPTURA'].isin(status_filter)]
 
+# NUEVO: Aplicar filtro de estado de captura a filtered_gdf también
+if status_filter:
+    # Filtrar el GDF para mostrar solo las secciones con los estados seleccionados
+    secciones_filtradas = filtered_sample['SECCIÓN'].unique()
+    filtered_gdf = filtered_gdf[filtered_gdf['SECCIÓN'].isin(secciones_filtradas)]
+
 # Calcular métricas
 total_secciones = filtered_gdf['SECCIÓN'].nunique()
 secciones_muestreadas = filtered_gdf[filtered_gdf['SECCIÓN'].isin(df_sample['SECCIÓN'])]['SECCIÓN'].nunique()
@@ -304,25 +310,25 @@ with tab1:
         """)
         
         # Ejemplo visual de cómo funcionan los filtros
-        with st.expander("💡 Ver ejemplo de uso de filtros"):
+        with st.expander("Ver ejemplo de uso de filtros"):
             st.markdown("""
-            **Caso de uso 1:** *"Quiero ver el progreso solo del Distrito 5"*
+            **Caso de uso 1: Quiero ver el progreso solo del Distrito 5**
             - Selecciona: Distrito = "5"
             - Municipio = "Todos"
             - Estado = [Todos seleccionados]
             
-            **Caso de uso 2:** *"Quiero ver qué secciones están pendientes en Acapulco"*
+            **Caso de uso 2: Quiero ver qué secciones están pendientes en Acapulco**
             - Distrito = "Todos" o el correspondiente
             - Municipio = "Acapulco de Juárez"
-            - Estado = Solo "Pendiente" ✓
+            - Estado = Solo "Pendiente"
             
-            **Caso de uso 3:** *"Ver todas las secciones completadas de la muestra"*
+            **Caso de uso 3: Ver todas las secciones completadas de la muestra**
             - Distrito = "Todos"
             - Municipio = "Todos"  
-            - Estado = Solo "Completada" ✓
-            - ✓ Activar "Mostrar solo secciones en muestra"
+            - Estado = Solo "Completada"
+            - Activar "Mostrar solo secciones en muestra"
             """)
-        
+            
     with col_inst2:
         st.subheader("🔑 Navegación por pestañas")
         st.markdown("""
@@ -519,38 +525,17 @@ with tab3:
         st.warning("⚠️ No hay datos geográficos disponibles para los filtros seleccionados.")
     else:
         try:
-            # MEJORA: Calcular bounds de manera más robusta
             bounds = map_data.total_bounds
-            if len(bounds) == 4 and not np.any(np.isinf(bounds)):
-                center_lat = (bounds[1] + bounds[3]) / 2
-                center_lon = (bounds[0] + bounds[2]) / 2
-                
-                # Calcular zoom automático basado en el área cubierta
-                lat_range = bounds[3] - bounds[1]
-                lon_range = bounds[2] - bounds[0]
-                
-                # Determinar zoom level basado en el rango geográfico
-                if max(lat_range, lon_range) > 2.0:
-                    zoom_start = 7
-                elif max(lat_range, lon_range) > 1.0:
-                    zoom_start = 8
-                elif max(lat_range, lon_range) > 0.5:
-                    zoom_start = 9
-                elif max(lat_range, lon_range) > 0.2:
-                    zoom_start = 10
-                else:
-                    zoom_start = 11
-            else:
-                # Valores por defecto para Guerrero si no se pueden calcular bounds
-                center_lat, center_lon, zoom_start = 17.5, -99.5, 7
+            center_lat = (bounds[1] + bounds[3]) / 2
+            center_lon = (bounds[0] + bounds[2]) / 2
             
             m = folium.Map(
                 location=[center_lat, center_lon], 
-                zoom_start=zoom_start, 
+                zoom_start=9, 
                 tiles="CartoDB positron"
             )
             
-            # Resto del código del mapa (capas Choropleth, GeoJson, etc.)
+            # Capa base con todos los polígonos
             folium.Choropleth(
                 geo_data=map_data,
                 name="📊 Total Lista Nominal",
@@ -564,10 +549,11 @@ with tab3:
                 show=True
             ).add_to(m)
             
-            # Capas por estado de captura
+            # NUEVO: Capas por estado de captura
             sampled_sections = map_data[map_data['is_sampled']].copy()
             
             if not sampled_sections.empty:
+                # Merge con datos de encuestas
                 sampled_sections = sampled_sections.merge(
                     df_sample[['SECCIÓN', 'ENCUESTAS_ASIGNADAS', 'STATUS_CAPTURA', 'ENCUESTADOR']], 
                     on='SECCIÓN', 
@@ -575,6 +561,7 @@ with tab3:
                     suffixes=('', '_sample')
                 )
                 
+                # Función de estilo según estado
                 def style_function(feature):
                     status = feature['properties'].get('STATUS_CAPTURA', 'Pendiente')
                     color_map = {
@@ -603,11 +590,9 @@ with tab3:
             
             folium.LayerControl().add_to(m)
             
-            # MEJORA: Ajustar bounds solo si tenemos datos válidos
-            if len(bounds) == 4 and not np.any(np.isinf(bounds)):
-                sw = [bounds[1], bounds[0]]
-                ne = [bounds[3], bounds[2]]
-                m.fit_bounds([sw, ne])
+            sw = [bounds[1], bounds[0]]
+            ne = [bounds[3], bounds[2]]
+            m.fit_bounds([sw, ne])
             
             st_folium(m, width=1400, height=700, returned_objects=[])
             
@@ -621,6 +606,7 @@ with tab3:
                 
         except Exception as e:
             st.error(f"❌ Error al crear el mapa: {str(e)}")
+
 # ==================== TAB 4: ANÁLISIS DE COBERTURA ====================
 with tab4:
     st.header("📊 Análisis de Cobertura de Muestra")
