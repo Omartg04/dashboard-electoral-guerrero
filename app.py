@@ -864,7 +864,7 @@ with tab6:
     col_eq1, col_eq2, col_eq3, col_eq4 = st.columns(4)
     
     num_encuestadores = filtered_sample['ENCUESTADOR'].nunique()
-    encuestas_por_encuestador = filtered_sample.groupby('ENCUESTADOR')['ENCUESTAS_REALIZADAS'].sum().mean()
+    encuestas_por_encuestador = filtered_sample.groupby('ENCUESTADOR')['ENCUESTAS_REALIZADAS_MUESTRAL'].sum().mean()
     calidad_promedio = filtered_sample['CALIDAD_DATOS'].mean()
     tiempo_promedio = filtered_sample['TIEMPO_PROMEDIO_MIN'].mean()
     
@@ -997,7 +997,7 @@ with tab7:
     with col_table2:
         sort_by = st.selectbox("Ordenar por", [
             'SECCIÓN', 'MUNICIPIOS', 'Distrito', 
-            'ENCUESTAS_REALIZADAS', 'CALIDAD_DATOS', 'STATUS_CAPTURA'
+            'ENCUESTAS_REALIZADAS_MUESTRAL', 'CALIDAD_DATOS', 'STATUS_CAPTURA'
         ])
     with col_table3:
         sort_order = st.radio("Orden", ['Ascendente', 'Descendente'], horizontal=True)
@@ -1020,7 +1020,7 @@ with tab7:
     col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
     col_stats1.metric("Registros mostrados", len(sample_display))
     col_stats2.metric("Total Lista Nominal", f"{sample_display['TOTAL LISTA NOMINAL'].sum():,}")
-    col_stats3.metric("Encuestas Realizadas", int(sample_display['ENCUESTAS_REALIZADAS'].sum()))
+    col_stats3.metric("Encuestas Realizadas", int(sample_display['ENCUESTAS_REALIZADAS_MUESTRAL'].sum()))
     col_stats4.metric("Calidad Promedio", f"{sample_display['CALIDAD_DATOS'].mean():.1f}")
     
     # Botón de descarga
